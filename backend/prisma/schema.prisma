@@ -1,0 +1,247 @@
+// Esquema de Base de Datos - Centro Psicológico Axioma
+// Plataforma de Gestión de Citas e Historias Clínicas
+// Motor: PostgreSQL con Prisma ORM
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -------------------------------------------------------------
+// ENUMERACIONES (Valores tipados del dominio)
+// -------------------------------------------------------------
+
+enum Rol {
+  ADMINISTRADOR
+  PSICOLOGO
+  PACIENTE
+}
+
+enum EstadoCita {
+  PROGRAMADA      // Agendada en el sistema
+  CONFIRMADA      // Confirmada por el paciente/centro
+  ATENDIDA        // Sesión realizada con éxito (descuenta paquete)
+  CANCELADA       // Cancelada por el paciente o terapeuta
+  REPROGRAMADA    // Modificada de fecha/hora
+  NO_ASISTIO      // Paciente no acudió a la sesión (no-show)
+}
+
+enum EstadoPaquete {
+  ACTIVO          // Con sesiones disponibles a favor
+  AGOTADO         // Todas las sesiones fueron consumidas
+  VENCIDO         // Expiró la vigencia del paquete
+  CANCELADO       // Anulado administrativamente
+}
+
+enum NivelRiesgo {
+  BAJO            // Probabilidad de inasistencia < 30%
+  MEDIO           // Probabilidad entre 30% y 65%
+  ALTO            // Probabilidad > 65%
+}
+
+enum DiaSemana {
+  LUNES
+  MARTES
+  MIERCOLES
+  JUEVES
+  VIERNES
+  SABADO
+  DOMINGO
+}
+
+// -------------------------------------------------------------
+// MODELO DE USUARIOS Y CONTROL DE ACCESO (Sprint 1)
+// -------------------------------------------------------------
+
+model Usuario {
+  id              String       @id @default(uuid())
+  correo          String       @unique @db.VarChar(150)
+  contrasenaHash  String       @map("contrasena_hash") @db.VarChar(255)
+  rol             Rol          @default(ADMINISTRADOR)
+  estaActivo      Boolean      @default(true) @map("esta_activo")
+  creadoEn        DateTime     @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn   DateTime     @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  psicologo       Psicologo?
+  paciente        Paciente?
+
+  @@map("usuarios")
+}
+
+// -------------------------------------------------------------
+// MODELO DE PSICÓLOGOS (Sprint 1)
+// -------------------------------------------------------------
+
+model Psicologo {
+  id                  String                    @id @default(uuid())
+  usuarioId           String                    @unique @map("usuario_id")
+  usuario             Usuario                   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  dni                 String                    @unique @db.VarChar(15)
+  nombres             String                    @db.VarChar(100)
+  apellidos           String                    @db.VarChar(100)
+  telefono            String?                   @db.VarChar(20)
+  numeroColegiatura   String?                   @map("numero_colegiatura") @db.VarChar(25) // C.Ps.P.
+  especialidad        String?                   @db.VarChar(120) // Ej. Terapia Cognitivo Conductual, Infantil, Pareja
+  tarifaPorSesion     Decimal?                  @map("tarifa_por_sesion") @db.Decimal(10, 2)
+  biografia           String?                   @db.Text
+  fotoUrl             String?                   @map("foto_url") @db.VarChar(255)
+  estaActivo          Boolean                   @default(true) @map("esta_activo")
+  creadoEn            DateTime                  @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn       DateTime                  @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  disponibilidades    DisponibilidadPsicologo[]
+  citas               Cita[]
+  evolucionesClinicas EvolucionClinica[]
+
+  @@map("psicologos")
+}
+
+model DisponibilidadPsicologo {
+  id            String     @id @default(uuid())
+  psicologoId   String     @map("psicologo_id")
+  psicologo     Psicologo  @relation(fields: [psicologoId], references: [id], onDelete: Cascade)
+  diaSemana     DiaSemana  @map("dia_semana")
+  horaInicio    String     @map("hora_inicio") @db.VarChar(5) // Formato "08:00"
+  horaFin       String     @map("hora_fin") @db.VarChar(5)    // Formato "13:00"
+  estaActivo    Boolean    @default(true) @map("esta_activo")
+
+  @@index([psicologoId])
+  @@map("disponibilidades_psicologo")
+}
+
+// -------------------------------------------------------------
+// MODELO DE PACIENTES (Sprint 2)
+// -------------------------------------------------------------
+
+model Paciente {
+  id                  String              @id @default(uuid())
+  usuarioId           String?             @unique @map("usuario_id") // Opcional: si tiene cuenta web creada
+  usuario             Usuario?            @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  dni                 String              @unique @db.VarChar(15)
+  nombres             String              @db.VarChar(100)
+  apellidos           String              @db.VarChar(100)
+  telefono            String?             @db.VarChar(20)
+  correo              String?             @db.VarChar(150)
+  fechaNacimiento     DateTime?           @map("fecha_nacimiento") @db.Date
+  genero              String?             @db.VarChar(20)
+  direccion           String?             @db.VarChar(200)
+  
+  // Datos de apoderado (en caso de pacientes menores de edad)
+  nombreApoderado     String?             @map("nombre_apoderado") @db.VarChar(150)
+  dniApoderado        String?             @map("dni_apoderado") @db.VarChar(15)
+  telefonoApoderado   String?             @map("telefono_apoderado") @db.VarChar(20)
+
+  estaActivo          Boolean             @default(true) @map("esta_activo")
+  creadoEn            DateTime            @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn       DateTime            @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  paquetesPaciente    PaquetePaciente[]
+  citas               Cita[]
+  evolucionesClinicas EvolucionClinica[]
+
+  @@index([dni])
+  @@map("pacientes")
+}
+
+// -------------------------------------------------------------
+// MODELO DE PAQUETES DE SESIONES (Sprint 2 y 3)
+// -------------------------------------------------------------
+
+model Paquete {
+  id                  String            @id @default(uuid())
+  nombre              String            @db.VarChar(120) // Ej. "Paquete Integral - 4 Sesiones"
+  cantidadSesiones    Int               @map("cantidad_sesiones")
+  precio              Decimal           @db.Decimal(10, 2)
+  descripcion         String?           @db.Text
+  vigenciaDias        Int               @default(90) @map("vigencia_dias") // Días de validez
+  estaActivo          Boolean           @default(true) @map("esta_activo")
+  creadoEn            DateTime          @default(now()) @map("creado_en") @db.Timestamptz
+
+  paquetesPaciente    PaquetePaciente[]
+
+  @@map("paquetes")
+}
+
+model PaquetePaciente {
+  id                  String         @id @default(uuid())
+  pacienteId          String         @map("paciente_id")
+  paqueteId           String         @map("paquete_id")
+  paciente            Paciente       @relation(fields: [pacienteId], references: [id])
+  paquete             Paquete        @relation(fields: [paqueteId], references: [id])
+  sesionesTotales     Int            @map("sesiones_totales")
+  sesionesConsumidas  Int            @default(0) @map("sesiones_consumidas")
+  sesionesRestantes   Int            @map("sesiones_restantes")
+  estado              EstadoPaquete  @default(ACTIVO)
+  fechaCompra         DateTime       @default(now()) @map("fecha_compra") @db.Timestamptz
+  fechaExpiracion     DateTime?      @map("fecha_expiracion") @db.Timestamptz
+
+  citas               Cita[]
+
+  @@index([pacienteId])
+  @@map("paquetes_paciente")
+}
+
+// -------------------------------------------------------------
+// MODELO DE CITAS Y PREDICCIÓN ML (Sprint 3 y 4)
+// -------------------------------------------------------------
+
+model Cita {
+  id                        String             @id @default(uuid())
+  pacienteId                String             @map("paciente_id")
+  psicologoId               String             @map("psicologo_id")
+  paquetePacienteId         String?            @map("paquete_paciente_id")
+  paciente                  Paciente           @relation(fields: [pacienteId], references: [id])
+  psicologo                 Psicologo          @relation(fields: [psicologoId], references: [id])
+  paquetePaciente           PaquetePaciente?   @relation(fields: [paquetePacienteId], references: [id])
+  
+  fechaHoraInicio           DateTime           @map("fecha_hora_inicio") @db.Timestamptz
+  fechaHoraFin              DateTime           @map("fecha_hora_fin") @db.Timestamptz
+  estado                    EstadoCita         @default(PROGRAMADA)
+  motivoConsulta            String?            @map("motivo_consulta") @db.VarChar(255)
+  notaCancelacion           String?            @map("nota_cancelacion") @db.Text
+
+  // Variables y Salidas del Módulo Machine Learning (No-Show Prediction)
+  probabilidadInasistencia  Decimal?           @map("probabilidad_inasistencia") @db.Decimal(5, 4) // Ej. 0.7420 (74.2%)
+  nivelRiesgoInasistencia   NivelRiesgo?       @map("nivel_riesgo_inasistencia")
+  
+  creadoEn                  DateTime           @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn             DateTime           @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  evolucionClinica          EvolucionClinica?
+
+  @@index([psicologoId, fechaHoraInicio])
+  @@index([pacienteId])
+  @@map("citas")
+}
+
+// -------------------------------------------------------------
+// MODELO DE HISTORIA / EVOLUCIÓN CLÍNICA (Sprint 4)
+// -------------------------------------------------------------
+
+model EvolucionClinica {
+  id                          String       @id @default(uuid())
+  citaId                      String       @unique @map("cita_id")
+  pacienteId                  String       @map("paciente_id")
+  psicologoId                 String       @map("psicologo_id")
+  cita                        Cita         @relation(fields: [citaId], references: [id])
+  paciente                    Paciente     @relation(fields: [pacienteId], references: [id])
+  psicologo                   Psicologo    @relation(fields: [psicologoId], references: [id])
+  
+  fechaSesion                 DateTime     @default(now()) @map("fecha_sesion") @db.Timestamptz
+  motivoConsulta              String       @map("motivo_consulta") @db.Text
+  tecnicasUtilizadas          String?      @map("tecnicas_utilizadas") @db.Text // Ej. Reestructuración cognitiva, respiración diafragmática
+  observacionesConductuales   String?      @map("observaciones_conductuales") @db.Text
+  notaEvolucion               String       @map("nota_evolucion") @db.Text // Nota de desarrollo SOAP
+  tareasCasa                  String?      @map("tareas_casa") @db.Text // Ejercicios asignados para la siguiente sesión
+
+  creadoEn                    DateTime     @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn               DateTime     @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  @@index([pacienteId])
+  @@index([psicologoId])
+  @@map("evoluciones_clinicas")
+}

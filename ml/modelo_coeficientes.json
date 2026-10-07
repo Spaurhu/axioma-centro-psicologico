@@ -1,0 +1,15 @@
+{
+  "intercepto": -1.85,
+  "peso_dias_anticipacion": 0.078,
+  "peso_tiene_paquete": -1.55,
+  "peso_inasistencias_previas": 0.92,
+  "peso_citas_previas": -0.18,
+  "peso_lunes": 0.32,
+  "peso_turno_noche": 0.41,
+  "metricas": {
+    "muestras_evaluadas": 1500,
+    "tasa_inasistencia_global": "16.2%",
+    "exactitud_estimada": "84.6%",
+    "area_roc_auc": "0.87"
+  }
+}
