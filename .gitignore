@@ -1,8 +1,17 @@
-# Dependencias (NO subir al repositorio)
+# ==============================================================================
+# .gitignore estándar (Inspirado en gitignore.io para Node, NextJS, NestJS, Windows, VSCode)
+# ==============================================================================
+
+# Dependencias y módulos
 node_modules/
 */node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Builds y compilaciones
+# Compilaciones y builds
 dist/
 */dist/
 .next/
@@ -11,34 +20,47 @@ out/
 */out/
 build/
 */build/
+.swc/
 
-# Variables de entorno y credenciales
+# Variables de entorno y secretos (NUNCA subir a repositorios públicos)
 .env
 */.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+*.env
 
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+# Documentos locales de avance y borradores
+*.docx
+*.doc
+*.pptx
+*.ppt
+*.xlsx
+*.xls
+Avance 1.docx
+Estructura del proyecto.docx
 
-# Editores y Sistema Operativo
-.vscode/
+# Archivos de caché de TypeScript y Next.js
+*.tsbuildinfo
+next-env.d.ts
+
+# Entornos de desarrollo / IDEs
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 .idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Archivos del Sistema Operativo
 .DS_Store
 Thumbs.db
-
-# TypeScript cache
-*.tsbuildinfo
-next-env.d.ts
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
