@@ -1,18 +1,233 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { 
-  Heart, ArrowRight, Check, Calendar, Shield, Sparkles, BrainCircuit,
-  Clock, Award, Users, CheckCircle2, ChevronDown, LogOut, User,
-  Phone, X, LayoutDashboard, BookmarkCheck
+import {
+  Heart, Check, Calendar, Shield, BrainCircuit, Clock, Award,
+  CheckCircle2, ChevronDown, LogOut, Phone, X, LayoutDashboard,
+  BookmarkCheck, Menu,
 } from 'lucide-react';
+import {
+  contenedor, foco, btnPrimary, btnSecondary, btnOnDark, tamSm, tamMd, tamLg,
+} from '@/lib/ui';
+
+
+/* ── Datos de presentación (solo contenido visual de la landing) ── */
+const enlacesNav = [
+  { href: '#espacios', texto: 'Espacios terapéuticos' },
+  { href: '#innovacion', texto: 'IA predictiva' },
+  { href: '#paquetes', texto: 'Planes y sesiones' },
+  { href: '#enfoque', texto: 'Enfoque clínico' },
+];
+
+type Variante = 'claro' | 'rosa' | 'suave' | 'lavanda';
+
+const estilosSala: Record<
+  Variante,
+  { card: string; titulo: string; texto: string; icono: string; pastilla: string; pie: string; pieSec: string; icoPie: string }
+> = {
+  claro: {
+    card: 'bg-white border-axioma-200/70',
+    titulo: 'text-axiomaText-ink',
+    texto: 'text-axiomaText-soft',
+    icono: 'bg-axioma-100 text-axioma-700',
+    pastilla: 'bg-axioma-50 text-axioma-700 border-axioma-200',
+    pie: 'bg-axioma-50 border-axioma-200/70 text-axiomaText-ink',
+    pieSec: 'text-axiomaText-soft',
+    icoPie: 'text-axioma-600',
+  },
+  rosa: {
+    card: 'bg-axioma-600 border-axioma-700',
+    titulo: 'text-white',
+    texto: 'text-white',
+    icono: 'bg-white/15 text-white',
+    pastilla: 'bg-white/15 text-white border-white/25',
+    pie: 'bg-white/10 border-white/20 text-white',
+    pieSec: 'text-axioma-50',
+    icoPie: 'text-axioma-100',
+  },
+  suave: {
+    card: 'bg-axioma-100 border-axioma-200',
+    titulo: 'text-axiomaText-ink',
+    texto: 'text-axiomaText-soft',
+    icono: 'bg-white text-axioma-700',
+    pastilla: 'bg-white/70 text-axioma-700 border-axioma-200',
+    pie: 'bg-white/70 border-white text-axiomaText-ink',
+    pieSec: 'text-axiomaText-soft',
+    icoPie: 'text-axioma-600',
+  },
+  lavanda: {
+    card: 'bg-heather border-white/60',
+    titulo: 'text-axiomaText-ink',
+    texto: 'text-axiomaText-soft',
+    icono: 'bg-white text-axioma-700',
+    pastilla: 'bg-white/70 text-axioma-700 border-white',
+    pie: 'bg-white/70 border-white text-axiomaText-ink',
+    pieSec: 'text-axiomaText-soft',
+    icoPie: 'text-axioma-600',
+  },
+};
+
+const salas = [
+  {
+    clave: 'agenda',
+    variante: 'claro' as Variante,
+    span: 'md:col-span-7',
+    Icono: Calendar,
+    etiqueta: 'Agendamiento dinámico',
+    titulo: 'Cero cruces de horario en tiempo real.',
+    texto:
+      'El motor de disponibilidad valida los bloques de 45 a 60 minutos con descanso preventivo entre pacientes, impidiendo cualquier sobreposición de turnos.',
+    PieIcono: Clock,
+    pieIzq: 'Bloques de 60 min',
+    pieDer: 'Lunes a sábado',
+  },
+  {
+    clave: 'ia',
+    id: 'innovacion',
+    variante: 'rosa' as Variante,
+    span: 'md:col-span-5',
+    Icono: BrainCircuit,
+    etiqueta: 'Inteligencia artificial',
+    titulo: 'Predicción de inasistencias (No-Show).',
+    texto:
+      'Algoritmo de regresión logística entrenado que calcula la probabilidad de asistencia del paciente según su historial y horario para activar recordatorios tempranos.',
+    PieIcono: BrainCircuit,
+    pieIzq: 'Modelo de 6 factores',
+    pieDer: '84.6% precisión',
+  },
+  {
+    clave: 'paquetes',
+    variante: 'suave' as Variante,
+    span: 'md:col-span-5',
+    Icono: BookmarkCheck,
+    etiqueta: 'Economía terapéutica',
+    titulo: 'Paquetes con deducción atómica.',
+    texto:
+      'Adquiere bonos de 4 u 8 sesiones con descuentos significativos. Cada vez que asistes a consulta, el sistema descuenta tu saldo de forma transparente.',
+    pieIzq: 'Desde S/. 65 por sesión en paquete',
+    pieDer: 'Ahorro hasta S/. 120',
+  },
+  {
+    clave: 'soap',
+    variante: 'lavanda' as Variante,
+    span: 'md:col-span-7',
+    Icono: Shield,
+    etiqueta: 'Historial clínico SOAP',
+    titulo: 'Evolución confidencial del paciente.',
+    texto:
+      'Notas clínicas estructuradas por sesión: Subjetivo, Objetivo, Apreciación y Plan. Tu psicólogo cuenta con el expediente completo en cada consulta.',
+    pieIzq: 'Cifrado de grado médico',
+    pieDer: 'Acceso exclusivo profesional',
+  },
+];
+
+const paquetes = [
+  {
+    clave: 'unica',
+    etiqueta: 'Evaluación inicial',
+    nombre: 'Sesión única',
+    descripcion:
+      'Ideal para primera consulta de diagnóstico, orientación puntual o crisis momentánea.',
+    precio: 'S/. 80',
+    detalle: '/ 1 sesión de 50m',
+    ahorro: null as string | null,
+    items: [
+      'Entrevista diagnóstica completa',
+      'Elección de horario libre',
+      'Apertura de historia clínica',
+    ],
+    cta: 'Agendar sesión',
+    destacado: false,
+  },
+  {
+    clave: 'cuatro',
+    etiqueta: 'Tratamiento focalizado',
+    nombre: 'Paquete 4 sesiones',
+    descripcion:
+      'Estructura quincenal o semanal para manejo de ansiedad, depresión leve o metas específicas.',
+    precio: 'S/. 280',
+    detalle: '/ S/. 70 por sesión',
+    ahorro: 'Ahorras S/. 40 respecto a tarifa individual',
+    items: [
+      'Plan de intervención terapéutico',
+      'Tareas intersesión guiadas',
+      'Control de saldo automático',
+      'Reprogramación con 24h previas',
+    ],
+    cta: 'Comenzar proceso',
+    destacado: true,
+  },
+  {
+    clave: 'ocho',
+    etiqueta: 'Transformación profunda',
+    nombre: 'Paquete 8 sesiones',
+    descripcion:
+      'Acompañamiento psicoterapéutico integral para cambios conductuales y emocionales de largo plazo.',
+    precio: 'S/. 520',
+    detalle: '/ S/. 65 por sesión',
+    ahorro: 'Ahorras S/. 120 (máximo beneficio)',
+    items: [
+      'Evaluación psicométrica incluida',
+      'Reporte de evolución clínica',
+      'Prioridad en horarios de agenda',
+    ],
+    cta: 'Elegir paquete integral',
+    destacado: false,
+  },
+];
+
+const garantias = [
+  {
+    Icono: Shield,
+    titulo: 'Confidencialidad absoluta',
+    texto: 'Tus notas de evolución y diagnósticos están protegidos con estrictos permisos por rol.',
+  },
+  {
+    Icono: BookmarkCheck,
+    titulo: 'Transparencia en sesiones',
+    texto: 'Visualiza en tu portal exactamente cuántas sesiones has tomado y cuántas te quedan activas.',
+  },
+  {
+    Icono: Calendar,
+    titulo: 'Flexibilidad de reprogramación',
+    texto: 'Si surge un imprevisto, cambia tu fecha u horario con antelación sin perder tu cupo.',
+  },
+];
+
+const pasos = [
+  {
+    titulo: 'Crea tu cuenta de paciente',
+    texto: 'Solo necesitas tus datos básicos para acceder a la agenda en vivo.',
+  },
+  {
+    titulo: 'Selecciona tu psicólogo y horario',
+    texto: 'Elige el día y bloque que mejor se ajuste a tu rutina diaria.',
+  },
+  {
+    titulo: 'Inicia tu proceso terapéutico',
+    texto: 'Conéctate o asiste a consulta con el respaldo de un profesional de salud mental.',
+  },
+];
+
+function EncabezadoSeccion({ titulo, texto }: { titulo: string; texto: string }) {
+  return (
+    <div className="mb-10 grid gap-4 lg:mb-14 lg:grid-cols-2 lg:items-end lg:gap-12">
+      <h2 className="font-display text-3xl font-medium leading-[1.12] tracking-heading text-axiomaText-ink sm:text-4xl">
+        {titulo}
+      </h2>
+      <p className="max-w-xl text-base leading-relaxed text-axiomaText-soft lg:justify-self-end">
+        {texto}
+      </p>
+    </div>
+  );
+}
 
 export default function PaginaPrincipal() {
-  const router = useRouter();
   const [usuario, setUsuario] = useState<any>(null);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [navMovil, setNavMovil] = useState(false);
   const [mostrarNotificacion, setMostrarNotificacion] = useState(true);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -56,95 +271,102 @@ export default function PaginaPrincipal() {
     return partes[0][0].toUpperCase();
   };
 
+  const esPaciente = usuario?.rol === 'PACIENTE';
+  const destinoCta = usuario ? '/paciente' : '/registro';
+
   return (
-    <div className="flex min-h-screen flex-col bg-sand-light font-sans text-ink-black antialiased selection:bg-terracotta-soft selection:text-navy-deep">
-      
-      {/* 1. TOP NAVIGATION BAR con Estado Autenticado & Dropdown UX */}
-      <header className="sticky top-0 z-50 bg-paper-white border-b border-frost/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1280px] items-center justify-between px-6 py-4 lg:px-12">
-          
+    <div className="flex min-h-screen flex-col bg-axioma-50 font-sans text-axiomaText-ink antialiased selection:bg-axioma-200 selection:text-axiomaText-ink">
+
+      {/* 1. NAVBAR */}
+      <header className="sticky top-0 z-50 border-b border-axioma-200/80 bg-axioma-50/90 backdrop-blur-md">
+        <div className={`${contenedor} flex items-center justify-between py-3.5 lg:py-4`}>
+
           {/* Logo */}
-          <Link href="/" className="group flex items-center space-x-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-navy text-paper-white transition-transform group-hover:scale-105">
-              <Heart className="h-5 w-5 fill-terracotta text-terracotta" />
+          <Link href="/" className={`group flex items-center space-x-3 rounded-card-sm ${foco}`}>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center transition-transform group-hover:scale-105">
+              <Image
+                src="/icono-axioma.jpg"
+                alt="Cerebro Axioma"
+                width={44}
+                height={44}
+                className="object-contain"
+              />
             </div>
-            <div>
-              <span className="text-xl font-bold tracking-tight text-navy">
-                Axioma
+            <div className="border-l-[1.5px] border-axiomaText-muted/30 pl-3">
+              <span className="block text-2xl font-extrabold lowercase leading-none tracking-tight text-axioma-600">
+                axioma
               </span>
-              <span className="block text-[11px] font-semibold uppercase tracking-widest text-slate">
-                Centro Psicológico
+              <span className="mt-1 block text-[11px] font-bold uppercase leading-tight tracking-wider text-axiomaText">
+                Centro<br />Psicológico
               </span>
             </div>
           </Link>
 
-          {/* Links Navegación */}
-          <nav className="hidden items-center space-x-8 md:flex">
-            <a href="#enfoque" className="text-sm font-medium text-graphite hover:text-navy transition">
-              Enfoque Clínico
-            </a>
-            <a href="#espacios" className="text-sm font-medium text-graphite hover:text-navy transition">
-              Espacios Terapéuticos
-            </a>
-            <a href="#paquetes" className="text-sm font-medium text-graphite hover:text-navy transition">
-              Planes & Sesiones
-            </a>
-            <a href="#innovacion" className="text-sm font-medium text-graphite hover:text-navy transition">
-              IA Predictiva
-            </a>
+          {/* Links navegación (desktop) */}
+          <nav className="hidden items-center gap-1 md:flex" aria-label="Secciones">
+            {enlacesNav.map((e) => (
+              <a
+                key={e.href}
+                href={e.href}
+                className={`rounded-button px-4 py-2 text-sm font-medium text-axiomaText-soft transition-colors hover:bg-axioma-100 hover:text-axioma-700 ${foco}`}
+              >
+                {e.texto}
+              </a>
+            ))}
           </nav>
 
-          {/* Zona de Acceso: Dinámica según Estado de Autenticación */}
-          <div className="flex items-center space-x-3">
+          {/* Zona de acceso */}
+          <div className="flex items-center gap-2 sm:gap-3">
             {usuario ? (
-              // ESTADO AUTENTICADO: Avatar con Dropdown
+              // ESTADO AUTENTICADO
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setMenuAbierto(!menuAbierto)}
-                  className="flex items-center space-x-2.5 rounded-[40px] border border-frost bg-sand/60 px-3.5 py-1.5 transition hover:bg-sand focus:outline-none"
+                  className={`flex items-center space-x-2.5 rounded-button border border-axioma-200 bg-white px-3 py-1.5 shadow-subtle transition hover:bg-axioma-50 ${foco}`}
                   aria-expanded={menuAbierto}
+                  aria-haspopup="menu"
                 >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-navy text-xs font-bold text-paper-white">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-axioma-600 text-xs font-bold text-white">
                     {obtenerIniciales(usuario.perfil?.nombres || usuario.correo)}
                   </div>
-                  <span className="text-xs font-semibold text-navy max-w-[120px] truncate">
+                  <span className="hidden max-w-[120px] truncate text-xs font-semibold text-axiomaText-ink sm:block">
                     {usuario.perfil?.nombres || usuario.correo.split('@')[0]}
                   </span>
-                  <ChevronDown className={`h-3.5 w-3.5 text-slate transition-transform ${menuAbierto ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`h-3.5 w-3.5 text-axiomaText-soft transition-transform ${menuAbierto ? 'rotate-180' : ''}`} />
                 </button>
 
-                {/* MENÚ DESPLEGABLE (DROPDOWN) */}
+                {/* MENÚ DESPLEGABLE */}
                 {menuAbierto && (
-                  <div className="absolute right-0 mt-2 w-64 rounded-[20px] bg-paper-white p-2 shadow-dropdown border border-frost animate-fade-in z-50">
-                    <div className="p-3 border-b border-frost/80">
-                      <p className="text-xs font-bold text-navy truncate">
+                  <div className="absolute right-0 z-50 mt-2 w-64 animate-fade-in rounded-card-sm border border-axioma-200 bg-white p-2 shadow-lift motion-reduce:animate-none">
+                    <div className="rounded-xl bg-axioma-50 p-3">
+                      <p className="truncate text-xs font-bold text-axiomaText-ink">
                         {usuario.perfil?.nombres ? `${usuario.perfil.nombres} ${usuario.perfil.apellidos || ''}` : usuario.correo}
                       </p>
-                      <p className="text-[11px] text-slate font-medium truncate mt-0.5">
+                      <p className="mt-0.5 truncate text-[11px] font-medium text-axiomaText-soft">
                         {usuario.correo}
                       </p>
-                      <span className="mt-2 inline-block rounded-[9999px] bg-terracotta-wash px-2.5 py-0.5 text-[10px] font-bold text-terracotta capitalize">
+                      <span className="mt-2 inline-block rounded-tag bg-axioma-600 px-2.5 py-0.5 text-[10px] font-bold capitalize text-white">
                         {usuario.rol.toLowerCase()}
                       </span>
                     </div>
 
-                    <div className="py-1">
+                    <div className="py-1.5">
                       {usuario.rol === 'PACIENTE' ? (
                         <>
                           <Link
                             href="/paciente"
                             onClick={() => setMenuAbierto(false)}
-                            className="flex items-center space-x-2.5 rounded-[12px] px-3 py-2 text-xs font-medium text-graphite hover:bg-sand/60 hover:text-navy transition"
+                            className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
                           >
-                            <BookmarkCheck className="h-4 w-4 text-terracotta" />
+                            <BookmarkCheck className="h-4 w-4 text-axioma-500" />
                             <span>Mi Portal & Paquetes</span>
                           </Link>
                           <Link
                             href="/paciente"
                             onClick={() => setMenuAbierto(false)}
-                            className="flex items-center space-x-2.5 rounded-[12px] px-3 py-2 text-xs font-medium text-graphite hover:bg-sand/60 hover:text-navy transition"
+                            className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
                           >
-                            <Calendar className="h-4 w-4 text-navy" />
+                            <Calendar className="h-4 w-4 text-axioma-500" />
                             <span>Agendar Cita en Vivo</span>
                           </Link>
                         </>
@@ -152,18 +374,18 @@ export default function PaginaPrincipal() {
                         <Link
                           href="/panel"
                           onClick={() => setMenuAbierto(false)}
-                          className="flex items-center space-x-2.5 rounded-[12px] px-3 py-2 text-xs font-medium text-graphite hover:bg-sand/60 hover:text-navy transition"
+                          className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
                         >
-                          <LayoutDashboard className="h-4 w-4 text-navy" />
+                          <LayoutDashboard className="h-4 w-4 text-axioma-500" />
                           <span>Panel de Control Clínico</span>
                         </Link>
                       )}
                     </div>
 
-                    <div className="border-t border-frost/80 pt-1 mt-1">
+                    <div className="border-t border-axioma-100 pt-1.5">
                       <button
                         onClick={cerrarSesion}
-                        className="flex w-full items-center space-x-2.5 rounded-[12px] px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
+                        className="flex w-full items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50"
                       >
                         <LogOut className="h-4 w-4" />
                         <span>Cerrar Sesión</span>
@@ -173,503 +395,360 @@ export default function PaginaPrincipal() {
                 )}
               </div>
             ) : (
-              // ESTADO PÚBLICO: Iniciar Sesión + Reservar
+              // ESTADO PÚBLICO
               <>
-                <Link
-                  href="/login"
-                  className="rounded-[40px] border border-ink-black bg-paper-white px-5 py-2 text-sm font-medium text-ink-black transition hover:bg-sand/60"
-                >
+                <Link href="/login" className={`${btnSecondary} ${tamSm} sm:px-5`}>
                   Iniciar Sesión
                 </Link>
-                <Link
-                  href="/registro"
-                  className="hidden sm:inline-flex rounded-[40px] bg-terracotta px-5 py-2 text-sm font-semibold text-paper-white transition hover:bg-terracotta-hover"
-                >
+                <Link href="/registro" className={`${btnPrimary} ${tamSm} hidden sm:inline-flex sm:px-5`}>
                   Reservar Cita
                 </Link>
               </>
             )}
+
+            {/* Botón menú móvil */}
+            <button
+              onClick={() => setNavMovil(!navMovil)}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border border-axioma-200 bg-white text-axioma-700 transition hover:bg-axioma-100 md:hidden ${foco}`}
+              aria-label={navMovil ? 'Cerrar menú' : 'Abrir menú'}
+              aria-expanded={navMovil}
+            >
+              {navMovil ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
           </div>
         </div>
+
+        {/* Navegación móvil */}
+        {navMovil && (
+          <nav className="animate-fade-in border-t border-axioma-200 bg-axioma-50 px-6 py-4 motion-reduce:animate-none md:hidden" aria-label="Secciones">
+            <div className="flex flex-col gap-1">
+              {enlacesNav.map((e) => (
+                <a
+                  key={e.href}
+                  href={e.href}
+                  onClick={() => setNavMovil(false)}
+                  className="rounded-xl px-3 py-3 text-sm font-medium text-axiomaText-soft transition hover:bg-axioma-100 hover:text-axioma-700"
+                >
+                  {e.texto}
+                </a>
+              ))}
+            </div>
+            {!usuario && (
+              <Link
+                href="/registro"
+                onClick={() => setNavMovil(false)}
+                className={`${btnPrimary} ${tamMd} mt-3 w-full sm:hidden`}
+              >
+                Reservar Cita
+              </Link>
+            )}
+          </nav>
+        )}
       </header>
 
-      {/* 2. FULL-BLEED HERO (Deep Slate Navy #1c2d42 background, Terracotta Sand accents) */}
-      <section className="relative overflow-hidden bg-navy px-6 py-20 lg:px-12 lg:py-28 text-paper-white">
-        <div className="mx-auto max-w-[1280px]">
-          <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12 lg:gap-8">
-            
-            {/* Lado Izquierdo: Copywriting & CTAs */}
-            <div className="lg:col-span-7 space-y-6">
-              <div className="inline-flex items-center space-x-2 rounded-[9999px] bg-paper-white/10 px-4 py-1.5 text-xs font-semibold text-sand-dark backdrop-blur-sm">
-                <span className="h-2 w-2 rounded-full bg-terracotta animate-pulse" />
-                <span>Salud Mental Basada en Evidencia · C.Ps.P.</span>
-              </div>
+      {/* 2. HERO */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-axioma-100 via-axioma-50 to-heather-soft">
+        <div className={`${contenedor} grid items-center gap-12 py-14 lg:grid-cols-12 lg:gap-8 lg:py-24`}>
 
-              <h1 className="text-5xl font-medium sm:text-6xl lg:text-[76px] lg:leading-[1.04] tracking-display">
-                Transforma tu bienestar con psicoterapia{' '}
-                <span className="font-semibold text-terracotta">cálida y precisa</span>.
-              </h1>
-
-              <p className="max-w-xl text-lg text-sand/90 leading-relaxed font-normal">
-                Sesiones individuales y familiares con psicólogos colegiados. Agenda tus horarios en tiempo real, adquiere paquetes con descuento y monitorea tu progreso clínico en una plataforma segura.
-              </p>
-
-              {/* Botón Terracotta + Ghost Outline Button */}
-              <div className="flex flex-wrap items-center gap-4 pt-4">
-                <Link
-                  href={usuario?.rol === 'PACIENTE' ? '/paciente' : '/registro'}
-                  className="rounded-[40px] bg-terracotta px-7 py-3.5 text-base font-semibold text-paper-white transition hover:bg-terracotta-hover hover:scale-[1.01]"
-                >
-                  {usuario?.rol === 'PACIENTE' ? 'Ir a Mi Portal de Citas' : 'Agendar Mi Primera Sesión'}
-                </Link>
-                <a
-                  href="#espacios"
-                  className="rounded-[40px] border border-paper-white bg-transparent px-7 py-3.5 text-base font-medium text-paper-white transition hover:bg-paper-white/10"
-                >
-                  Conocer Espacios
-                </a>
-              </div>
-
-              {/* Indicadores clave */}
-              <div className="grid grid-cols-3 gap-6 pt-10 border-t border-paper-white/15">
-                <div>
-                  <div className="text-3xl font-bold tracking-heading text-paper-white">100%</div>
-                  <div className="text-xs text-sand/80 mt-1">Colegiados C.Ps.P.</div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold tracking-heading text-terracotta">0 Cruces</div>
-                  <div className="text-xs text-sand/80 mt-1">Disponibilidad en Vivo</div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold tracking-heading text-paper-white">IA SOAP</div>
-                  <div className="text-xs text-sand/80 mt-1">Prevención No-Show</div>
-                </div>
-              </div>
+          {/* Lado izquierdo */}
+          <div className="space-y-6 lg:col-span-7">
+            <div className="inline-flex items-center gap-2 rounded-tag border border-axioma-200 bg-white/80 px-4 py-1.5 text-xs font-semibold text-axioma-700">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-axioma-500 motion-reduce:animate-none" />
+              <span>Salud mental basada en evidencia, con psicólogos colegiados C.Ps.P.</span>
             </div>
 
-            {/* Lado Derecho: WhatsApp & Interactive Health Mockup */}
-            <div className="lg:col-span-5 flex justify-center">
-              <div className="w-full max-w-[360px] rounded-[32px] bg-paper-white p-3 shadow-none border border-paper-white/20">
-                {/* Marco de Dispositivo */}
-                <div className="overflow-hidden rounded-[24px] bg-paper-white border border-frost">
-                  {/* Status Bar */}
-                  <div className="bg-navy-mid px-4 py-3 text-paper-white flex items-center justify-between">
+            <h1 className="font-display text-4xl font-medium leading-[1.08] tracking-display text-axiomaText-ink sm:text-5xl lg:text-6xl">
+              Transforma tu bienestar con psicoterapia cálida y precisa.
+            </h1>
+
+            <p className="max-w-xl text-lg leading-relaxed text-axiomaText-soft">
+              Sesiones individuales y familiares con psicólogos colegiados. Agenda tus horarios en tiempo real, adquiere paquetes con descuento y monitorea tu progreso clínico en una plataforma segura.
+            </p>
+
+            {/* Botones */}
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <Link href={esPaciente ? '/paciente' : '/registro'} className={`${btnPrimary} ${tamLg}`}>
+                {esPaciente ? 'Ir a Mi Portal de Citas' : 'Agendar Mi Primera Sesión'}
+              </Link>
+              <a href="#espacios" className={`${btnSecondary} ${tamLg}`}>
+                Conocer Espacios
+              </a>
+            </div>
+
+            {/* Indicadores clave */}
+            <div className="grid grid-cols-1 gap-3 pt-6 sm:grid-cols-3">
+              {[
+                { Icono: Award, valor: '100%', etiqueta: 'Colegiados C.Ps.P.' },
+                { Icono: Clock, valor: '0 Cruces', etiqueta: 'Disponibilidad en vivo' },
+                { Icono: BrainCircuit, valor: 'IA SOAP', etiqueta: 'Prevención No-Show' },
+              ].map(({ Icono, valor, etiqueta }) => (
+                <div
+                  key={valor}
+                  className="flex items-center gap-3 rounded-card-sm border border-axioma-200 bg-white/70 p-4"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-axioma-100 text-axioma-700">
+                    <Icono className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <div className="text-lg font-bold leading-tight tracking-heading text-axiomaText-ink">{valor}</div>
+                    <div className="text-xs text-axiomaText-soft">{etiqueta}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Lado derecho: mockup celular sobre panel de color */}
+          <div className="mx-auto w-full max-w-[420px] lg:col-span-5 lg:max-w-none lg:pl-6">
+            <div className="rounded-card bg-axioma-600 p-5 shadow-panel sm:p-8">
+              <div className="mx-auto w-full max-w-[320px] rounded-[28px] bg-white p-2.5 shadow-lift">
+                <div className="overflow-hidden rounded-[20px] border border-axioma-100">
+                  {/* Cabecera */}
+                  <div className="flex items-center justify-between border-b border-axioma-100 bg-axioma-50 px-4 py-3 text-axiomaText-ink">
                     <div className="flex items-center space-x-2">
-                      <div className="h-8 w-8 rounded-full bg-sand flex items-center justify-center text-navy font-bold text-xs">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-axioma-600 text-xs font-bold text-white">
                         Ax
                       </div>
                       <div>
                         <p className="text-xs font-semibold leading-tight">Dra. Camila Morales</p>
-                        <p className="text-[10px] text-sand flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-terracotta"></span> C.Ps.P. 45892 · En línea
+                        <p className="mt-0.5 flex items-center gap-1 text-[10px] text-axiomaText-soft">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> C.Ps.P. 45892, en línea
                         </p>
                       </div>
                     </div>
-                    <Phone className="h-4 w-4 text-sand" />
+                    <Phone className="h-4 w-4 text-axioma-600" />
                   </div>
 
-                  {/* Chat Area */}
-                  <div className="bg-sand-light p-4 space-y-3 min-h-[300px] text-xs">
-                    <div className="max-w-[85%] rounded-[16px] bg-paper-white p-3 border border-frost text-graphite">
-                      <p className="font-semibold text-navy text-[11px] mb-0.5">Centro Axioma</p>
+                  {/* Chat */}
+                  <div className="min-h-[290px] space-y-3 bg-heather-soft p-4 text-xs">
+                    <div className="max-w-[85%] rounded-card-sm rounded-tl-sm border border-axioma-100 bg-white p-3 text-axiomaText-ink">
+                      <p className="mb-0.5 text-[11px] font-semibold text-axioma-700">Centro Axioma</p>
                       Hola Joao, tu próxima sesión terapéutica ha sido confirmada para este jueves a las 10:00 AM.
                     </div>
 
-                    <div className="ml-auto max-w-[85%] rounded-[16px] bg-terracotta-wash p-3 text-graphite text-right border border-terracotta/20">
+                    <div className="ml-auto max-w-[85%] rounded-card-sm rounded-tr-sm bg-axioma-600 p-3 text-right text-white">
                       <p>Muchas gracias, doctora. Ya completé mi registro de síntomas previo.</p>
-                      <span className="text-[9px] text-slate mt-1 block">10:02 AM · ✓✓</span>
+                      <span className="mt-1 block text-[9px] text-axioma-100">10:02 AM · ✓✓</span>
                     </div>
 
-                    <div className="rounded-[16px] bg-paper-white p-3 border border-frost">
-                      <div className="flex items-center justify-between border-b border-frost pb-2 mb-2">
-                        <span className="text-[11px] font-bold text-navy">Paquete Activo</span>
-                        <span className="rounded-[9999px] bg-ice px-2 py-0.5 text-[10px] font-bold text-navy">
+                    <div className="rounded-card-sm border border-axioma-100 bg-white p-3 shadow-subtle">
+                      <div className="mb-2 flex items-center justify-between border-b border-axioma-100 pb-2">
+                        <span className="text-[11px] font-bold text-axiomaText-ink">Paquete Activo</span>
+                        <span className="rounded-tag bg-axioma-100 px-2 py-0.5 text-[10px] font-bold text-axioma-700">
                           3/4 Restantes
                         </span>
                       </div>
-                      <p className="text-[11px] text-graphite">
+                      <p className="text-[11px] text-axiomaText-soft">
                         Terapia Cognitivo-Conductual · Sesión 2 de 4
                       </p>
                     </div>
 
-                    <div className="rounded-[16px] bg-ice/70 p-2.5 text-center text-[11px] text-navy font-semibold">
+                    <div className="rounded-card-sm bg-axioma-100 p-2.5 text-center text-[11px] font-semibold text-axioma-800">
                       🎯 Asistencia predictiva: Riesgo Bajo (7.5%)
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-
           </div>
+
         </div>
       </section>
 
-      {/* 3. LOGO STRIP / ALIANZAS */}
-      <div className="border-b border-frost bg-paper-white py-6">
-        <div className="mx-auto max-w-[1280px] px-6 lg:px-12 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate">
-            Estandares de Confidencialidad Médica & Normativa en Salud
+      {/* 3. BANDA DE RESPALDO (burdeos: contraste y peso visual) */}
+      <section className="bg-axioma-900 text-white">
+        <div className={`${contenedor} flex flex-col gap-5 py-6 lg:flex-row lg:items-center lg:justify-between`}>
+          <p className="max-w-[16rem] text-sm font-medium leading-snug text-axioma-200">
+            Estándares de confidencialidad médica y normativa en salud
           </p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-8 sm:gap-14 text-sm font-semibold text-graphite">
-            <span className="flex items-center gap-2">
-              <Award className="h-4 w-4 text-terracotta" /> Colegio de Psicólogos del Perú (C.Ps.P.)
-            </span>
-            <span className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-navy" /> Ley N° 29733 de Datos Personales
-            </span>
-            <span className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-navy-light" /> Historias Clínicas Formato SOAP
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. PASTEL ROOMS FEATURE GRID (Terracotta Wash, Ice, Sand, Heather) */}
-      <section id="espacios" className="px-6 py-20 lg:px-12 max-w-[1280px] mx-auto w-full">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center space-x-2 rounded-[9999px] bg-terracotta-wash px-4 py-1 text-xs font-semibold text-navy">
-            <span>Espacios Diseñados para Sanar</span>
-          </div>
-          <h2 className="mt-4 text-3xl sm:text-5xl font-medium tracking-heading text-navy">
-            Una clínica digital estructurada en{' '}
-            <span className="font-semibold text-terracotta">salas de bienestar</span>.
-          </h2>
-          <p className="mt-4 text-base text-graphite">
-            Cada módulo de nuestra plataforma está pensado con calidez y rigor clínico para eliminar la fricción entre tú y tu terapeuta.
-          </p>
-        </div>
-
-        {/* Grid de Cards Pastel */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
-          {/* Card 1: Terracotta Wash */}
-          <div className="rounded-[24px] bg-terracotta-wash p-8 sm:p-10 transition-transform duration-200 hover:scale-[1.008]">
-            <div className="inline-flex rounded-[9999px] bg-paper-white px-3.5 py-1 text-xs font-bold text-navy mb-6">
-              Agendamiento Dinámico
-            </div>
-            <h3 className="text-2xl sm:text-3xl font-bold tracking-heading text-navy mb-3">
-              Cero cruces de horario en tiempo real.
-            </h3>
-            <p className="text-graphite text-base leading-relaxed mb-6">
-              El motor de disponibilidad valida los bloques de 45 a 60 minutos con descanso preventivo entre pacientes, impidiendo cualquier sobreposición de turnos.
-            </p>
-            <div className="rounded-[16px] bg-paper-white p-5 border border-frost/60">
-              <div className="flex items-center justify-between text-xs font-semibold text-navy">
-                <span className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-terracotta" /> Bloques de 60 min
+          <ul className="grid gap-4 sm:grid-cols-3 lg:gap-10">
+            {[
+              { Icono: Award, texto: 'Colegio de Psicólogos del Perú (C.Ps.P.)' },
+              { Icono: Shield, texto: 'Ley N° 29733 de Datos Personales' },
+              { Icono: CheckCircle2, texto: 'Historias clínicas formato SOAP' },
+            ].map(({ Icono, texto }) => (
+              <li key={texto} className="flex items-center gap-3 text-sm font-semibold">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-axioma-300">
+                  <Icono className="h-4 w-4" />
                 </span>
-                <span className="text-slate">Lunes a Sábado</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Ice Calm */}
-          <div className="rounded-[24px] bg-ice p-8 sm:p-10 transition-transform duration-200 hover:scale-[1.008]">
-            <div className="inline-flex rounded-[9999px] bg-paper-white px-3.5 py-1 text-xs font-bold text-navy mb-6">
-              Inteligencia Artificial
-            </div>
-            <h3 className="text-2xl sm:text-3xl font-bold tracking-heading text-navy mb-3">
-              Predicción de inasistencias (No-Show).
-            </h3>
-            <p className="text-graphite text-base leading-relaxed mb-6">
-              Algoritmo de regresión logística entrenado que calcula la probabilidad de asistencia del paciente según su historial y horario para activar recordatorios tempranos.
-            </p>
-            <div className="rounded-[16px] bg-paper-white p-5 border border-frost/60">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-navy flex items-center gap-1.5">
-                  <BrainCircuit className="h-4 w-4 text-navy-light" /> Modelo de 6 Factores
-                </span>
-                <span className="font-semibold text-terracotta font-bold">84.6% Precisión</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: Warm Sand */}
-          <div className="rounded-[24px] bg-sand p-8 sm:p-10 transition-transform duration-200 hover:scale-[1.008]">
-            <div className="inline-flex rounded-[9999px] bg-paper-white px-3.5 py-1 text-xs font-bold text-navy mb-6">
-              Economía Terapéutica
-            </div>
-            <h3 className="text-2xl sm:text-3xl font-bold tracking-heading text-navy mb-3">
-              Paquetes con deducción atómica.
-            </h3>
-            <p className="text-graphite text-base leading-relaxed mb-6">
-              Adquiere bonos de 4 u 8 sesiones con descuentos significativos. Cada vez que asistes a consulta, el sistema descuenta tu saldo de forma transparente.
-            </p>
-            <div className="rounded-[16px] bg-paper-white p-5 border border-frost/60">
-              <div className="flex items-center justify-between text-xs font-semibold text-charcoal">
-                <span>Desde S/. 65 por sesión en paquete</span>
-                <span className="text-terracotta font-bold">Ahorro hasta S/. 120</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: Soft Heather */}
-          <div className="rounded-[24px] bg-heather p-8 sm:p-10 transition-transform duration-200 hover:scale-[1.008]">
-            <div className="inline-flex rounded-[9999px] bg-paper-white px-3.5 py-1 text-xs font-bold text-navy mb-6">
-              Historial Clínico SOAP
-            </div>
-            <h3 className="text-2xl sm:text-3xl font-bold tracking-heading text-navy mb-3">
-              Evolución confidencial del paciente.
-            </h3>
-            <p className="text-graphite text-base leading-relaxed mb-6">
-              Notas clínicas estructuradas por sesión: Subjetivo, Objetivo, Apreciación y Plan. Tu psicólogo cuenta con el expediente completo en cada consulta.
-            </p>
-            <div className="rounded-[16px] bg-paper-white p-5 border border-frost/60">
-              <div className="flex items-center justify-between text-xs font-semibold text-navy">
-                <span>Cifrado de grado médico</span>
-                <span className="text-slate">Acceso exclusivo profesional</span>
-              </div>
-            </div>
-          </div>
-
+                {texto}
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
-      {/* 5. SECCIÓN DE PAQUETES TERAPÉUTICOS */}
-      <section id="paquetes" className="bg-paper-white py-20 px-6 lg:px-12 border-y border-frost">
-        <div className="max-w-[1280px] mx-auto">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <span className="rounded-[9999px] bg-ice px-4 py-1 text-xs font-bold text-navy uppercase tracking-wider">
-              Inversión en tu Salud
-            </span>
-            <h2 className="mt-4 text-3xl sm:text-5xl font-medium tracking-heading text-navy">
-              Paquetes terapéuticos accesibles
-            </h2>
-            <p className="mt-3 text-base text-graphite">
-              Elige la modalidad que mejor se adapte a tus objetivos terapéuticos.
-            </p>
-          </div>
+      {/* 4. ESPACIOS (bento asimétrico sobre lavanda) */}
+      <section id="espacios" className="scroll-mt-20 bg-heather-soft">
+        <div className={`${contenedor} py-16 lg:py-20`}>
+          <EncabezadoSeccion
+            titulo="Una clínica digital estructurada en salas de bienestar."
+            texto="Cada módulo de nuestra plataforma está pensado con calidez y rigor clínico para eliminar la fricción entre tú y tu terapeuta."
+          />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* Paquete 1: Sesión Individual */}
-            <div className="rounded-[24px] bg-sand/60 p-8 flex flex-col justify-between transition-transform duration-200 hover:scale-[1.01]">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-graphite">
-                  Evaluación Inicial
-                </span>
-                <h3 className="mt-2 text-2xl font-bold text-navy">Sesión Única</h3>
-                <p className="mt-2 text-xs text-graphite">
-                  Ideal para primera consulta de diagnóstico, orientación puntual o crisis momentánea.
-                </p>
-                <div className="mt-6 flex items-baseline">
-                  <span className="text-4xl font-bold text-navy">S/. 80</span>
-                  <span className="ml-2 text-xs text-slate">/ 1 sesión de 50m</span>
-                </div>
-                <ul className="mt-6 space-y-3 text-xs text-graphite">
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-terracotta" /> Entrevista diagnóstica completa
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-terracotta" /> Elección de horario libre
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-terracotta" /> Apertura de historia clínica
-                  </li>
-                </ul>
-              </div>
-
-              <div className="mt-8 pt-6 border-t border-frost">
-                <Link
-                  href={usuario ? '/paciente' : '/registro'}
-                  className="block text-center rounded-[40px] border border-ink-black bg-paper-white py-3 text-xs font-semibold text-ink-black hover:bg-sand/50 transition"
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-12">
+            {salas.map((s) => {
+              const e = estilosSala[s.variante];
+              const PieIcono = s.PieIcono;
+              return (
+                <article
+                  key={s.clave}
+                  id={s.id}
+                  className={`flex scroll-mt-24 flex-col rounded-card border p-7 shadow-card sm:p-9 ${s.span} ${e.card}`}
                 >
-                  Agendar Sesión
-                </Link>
-              </div>
-            </div>
-
-            {/* Paquete 2: Proceso 4 Sesiones - RECOMENDADO con CTA Terracotta */}
-            <div className="rounded-[24px] bg-terracotta-wash p-8 flex flex-col justify-between border-2 border-navy relative transition-transform duration-200 hover:scale-[1.01]">
-              <div className="absolute -top-3.5 right-6 rounded-[9999px] bg-terracotta px-3.5 py-1 text-[11px] font-bold text-paper-white uppercase tracking-wider">
-                Recomendado
-              </div>
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-terracotta font-bold">
-                  Tratamiento Focalizado
-                </span>
-                <h3 className="mt-2 text-2xl font-bold text-navy">Paquete 4 Sesiones</h3>
-                <p className="mt-2 text-xs text-graphite">
-                  Estructura quincenal o semanal para manejo de ansiedad, depresión leve o metas específicas.
-                </p>
-                <div className="mt-6 flex items-baseline">
-                  <span className="text-4xl font-bold text-navy">S/. 280</span>
-                  <span className="ml-2 text-xs text-slate">/ S/. 70 por sesión</span>
-                </div>
-                <div className="mt-1 text-[11px] font-bold text-terracotta">
-                  Ahorras S/. 40 respecto a tarifa individual
-                </div>
-                <ul className="mt-6 space-y-3 text-xs text-graphite">
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-terracotta" /> Plan de intervención terapéutico
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-terracotta" /> Tareas intercesión guiadas
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-terracotta" /> Control de saldo automático
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-terracotta" /> Reprogramación con 24h previas
-                  </li>
-                </ul>
-              </div>
-
-              <div className="mt-8 pt-6 border-t border-frost">
-                <Link
-                  href={usuario ? '/paciente' : '/registro'}
-                  className="block text-center rounded-[40px] bg-terracotta py-3 text-xs font-semibold text-paper-white hover:bg-terracotta-hover transition"
-                >
-                  Comenzar Proceso
-                </Link>
-              </div>
-            </div>
-
-            {/* Paquete 3: Proceso 8 Sesiones */}
-            <div className="rounded-[24px] bg-ice/60 p-8 flex flex-col justify-between transition-transform duration-200 hover:scale-[1.01]">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-navy">
-                  Transformación Profunda
-                </span>
-                <h3 className="mt-2 text-2xl font-bold text-navy">Paquete 8 Sesiones</h3>
-                <p className="mt-2 text-xs text-graphite">
-                  Acompañamiento psicoterapéutico integral para cambios conductuales y emocionales de largo plazo.
-                </p>
-                <div className="mt-6 flex items-baseline">
-                  <span className="text-4xl font-bold text-navy">S/. 520</span>
-                  <span className="ml-2 text-xs text-slate">/ S/. 65 por sesión</span>
-                </div>
-                <div className="mt-1 text-[11px] font-bold text-navy">
-                  Ahorras S/. 120 (Máximo beneficio)
-                </div>
-                <ul className="mt-6 space-y-3 text-xs text-graphite">
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-terracotta" /> Evaluación psicométrica incluida
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-terracotta" /> Reporte de evolución clínica
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-terracotta" /> Prioridad en horarios de agenda
-                  </li>
-                </ul>
-              </div>
-
-              <div className="mt-8 pt-6 border-t border-frost">
-                <Link
-                  href={usuario ? '/paciente' : '/registro'}
-                  className="block text-center rounded-[40px] border border-ink-black bg-paper-white py-3 text-xs font-semibold text-ink-black hover:bg-sand/50 transition"
-                >
-                  Elegir Paquete Integral
-                </Link>
-              </div>
-            </div>
-
+                  <div className="mb-6 flex items-center gap-3">
+                    <span className={`flex h-11 w-11 items-center justify-center rounded-xl ${e.icono}`}>
+                      <s.Icono className="h-5 w-5" />
+                    </span>
+                    <span className={`rounded-tag border px-3 py-1 text-xs font-semibold ${e.pastilla}`}>
+                      {s.etiqueta}
+                    </span>
+                  </div>
+                  <h3 className={`mb-3 font-display text-2xl font-medium leading-tight tracking-heading sm:text-[28px] ${e.titulo}`}>
+                    {s.titulo}
+                  </h3>
+                  <p className={`mb-7 text-base leading-relaxed ${e.texto}`}>{s.texto}</p>
+                  <div className={`mt-auto flex flex-wrap items-center justify-between gap-2 rounded-card-sm border p-4 text-xs font-semibold ${e.pie}`}>
+                    <span className="flex items-center gap-2">
+                      {PieIcono && <PieIcono className={`h-4 w-4 ${e.icoPie}`} />}
+                      {s.pieIzq}
+                    </span>
+                    <span className={e.pieSec}>{s.pieDer}</span>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* 6. TOOLKIT CLINIC BAND */}
-      <section id="innovacion" className="px-6 py-20 lg:px-12 bg-sand-light">
-        <div className="max-w-[1280px] mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      {/* 5. PAQUETES */}
+      <section id="paquetes" className="scroll-mt-20 border-y border-axioma-200 bg-axioma-50">
+        <div className={`${contenedor} py-16 lg:py-20`}>
+          <EncabezadoSeccion
+            titulo="Paquetes terapéuticos accesibles"
+            texto="Elige la modalidad que mejor se adapte a tus objetivos terapéuticos. Mientras más sesiones, menor el costo por sesión."
+          />
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 md:items-stretch">
+            {paquetes.map((p) => (
+              <div
+                key={p.clave}
+                className={
+                  p.destacado
+                    ? 'relative flex flex-col justify-between rounded-card border border-axioma-800 bg-axioma-900 p-7 text-white shadow-lift transition-shadow duration-200 hover:shadow-panel md:-my-4 lg:p-8'
+                    : 'flex flex-col justify-between rounded-card border border-axioma-200 bg-white p-7 shadow-card transition-shadow duration-200 hover:shadow-lift lg:p-8'
+                }
+              >
+                {p.destacado && (
+                  <div className="absolute -top-3.5 right-6 rounded-tag bg-axioma-300 px-3.5 py-1 text-[11px] font-bold text-axioma-950">
+                    Recomendado
+                  </div>
+                )}
+                <div>
+                  <span className={`text-xs font-semibold ${p.destacado ? 'text-axioma-300' : 'text-axioma-700'}`}>
+                    {p.etiqueta}
+                  </span>
+                  <h3 className={`mt-1.5 font-display text-2xl font-medium tracking-heading ${p.destacado ? 'text-white' : 'text-axiomaText-ink'}`}>
+                    {p.nombre}
+                  </h3>
+                  <p className={`mt-2 text-sm leading-relaxed ${p.destacado ? 'text-axioma-100' : 'text-axiomaText-soft'}`}>
+                    {p.descripcion}
+                  </p>
+
+                  <div className="mt-6 flex items-baseline">
+                    <span className={`text-4xl font-bold tracking-heading ${p.destacado ? 'text-white' : 'text-axiomaText-ink'}`}>
+                      {p.precio}
+                    </span>
+                    <span className={`ml-2 text-xs ${p.destacado ? 'text-axioma-200' : 'text-axiomaText-soft'}`}>
+                      {p.detalle}
+                    </span>
+                  </div>
+                  {p.ahorro && (
+                    <div className={`mt-2 inline-block rounded-tag px-3 py-1 text-[11px] font-bold ${p.destacado ? 'bg-white/10 text-axioma-100' : 'bg-axioma-100 text-axioma-700'}`}>
+                      {p.ahorro}
+                    </div>
+                  )}
+
+                  <ul className="mt-6 space-y-3 text-sm">
+                    {p.items.map((item) => (
+                      <li key={item} className={`flex items-start gap-2.5 ${p.destacado ? 'text-axioma-50' : 'text-axiomaText-soft'}`}>
+                        <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${p.destacado ? 'bg-white/10 text-axioma-300' : 'bg-axioma-100 text-axioma-700'}`}>
+                          <Check className="h-3 w-3" strokeWidth={3} />
+                        </span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className={`mt-8 border-t pt-6 ${p.destacado ? 'border-white/15' : 'border-axioma-100'}`}>
+                  <Link
+                    href={destinoCta}
+                    className={`${p.destacado ? btnOnDark : btnSecondary} ${tamMd} w-full`}
+                  >
+                    {p.cta}
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 6. ENFOQUE CLÍNICO */}
+      <section id="enfoque" className="scroll-mt-20 bg-axioma-100">
+        <div className={`${contenedor} py-16 lg:py-20`}>
+          <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-2 lg:gap-14">
             <div>
-              <span className="rounded-[9999px] bg-paper-white px-4 py-1 text-xs font-bold text-navy uppercase tracking-wider border border-frost">
-                Protocolo Profesional
-              </span>
-              <h2 className="mt-4 text-3xl sm:text-4xl font-bold text-navy tracking-heading">
+              <h2 className="font-display text-3xl font-medium leading-[1.12] tracking-heading text-axiomaText-ink sm:text-4xl">
                 Tu viaje de sanación respaldado por un equipo integral.
               </h2>
-              <p className="mt-4 text-graphite leading-relaxed text-base">
+              <p className="mt-4 max-w-xl text-base leading-relaxed text-axiomaText-soft">
                 No dejamos tu proceso al azar. Cada terapeuta de Axioma sigue un código de ética riguroso, respaldado por herramientas digitales que optimizan cada minuto de tu tiempo de consulta.
               </p>
 
-              <div className="mt-8 space-y-4">
-                <div className="flex items-start gap-3 rounded-[16px] bg-paper-white p-4 border border-frost">
-                  <div className="h-6 w-6 rounded-full bg-terracotta flex items-center justify-center text-paper-white font-bold text-xs shrink-0 mt-0.5">
-                    ✓
+              <div className="mt-8 space-y-3">
+                {garantias.map(({ Icono, titulo, texto }) => (
+                  <div
+                    key={titulo}
+                    className="flex items-start gap-4 rounded-card-sm border border-axioma-200/70 bg-white p-5 shadow-card"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-axioma-100 text-axioma-700">
+                      <Icono className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <h4 className="text-sm font-bold text-axiomaText-ink">{titulo}</h4>
+                      <p className="mt-1 text-sm leading-relaxed text-axiomaText-soft">{texto}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-navy">Confidencialidad Absoluta</h4>
-                    <p className="text-xs text-slate mt-0.5">
-                      Tus notas de evolución y diagnósticos están protegidos con estrictos permisos por rol.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 rounded-[16px] bg-paper-white p-4 border border-frost">
-                  <div className="h-6 w-6 rounded-full bg-navy-mid flex items-center justify-center text-paper-white font-bold text-xs shrink-0 mt-0.5">
-                    ✓
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-navy">Transparencia en Sesiones</h4>
-                    <p className="text-xs text-slate mt-0.5">
-                      Visualiza en tu portal exactamente cuántas sesiones has tomado y cuántas te quedan activas.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 rounded-[16px] bg-paper-white p-4 border border-frost">
-                  <div className="h-6 w-6 rounded-full bg-terracotta-dark flex items-center justify-center text-paper-white font-bold text-xs shrink-0 mt-0.5">
-                    ✓
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-navy">Flexibilidad de Reprogramación</h4>
-                    <p className="text-xs text-slate mt-0.5">
-                      Si surge un imprevisto, cambia tu fecha u horario con antelación sin perder tu cupo.
-                    </p>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
 
-            {/* Tarjeta de Resumen Editorial */}
-            <div className="rounded-[24px] bg-paper-white p-8 sm:p-10 border border-frost">
-              <h3 className="text-xl font-bold text-navy mb-6">
+            {/* Pasos: es una secuencia real, por eso va numerada */}
+            <div className="rounded-card bg-axioma-900 p-7 text-white shadow-panel sm:p-10">
+              <h3 className="mb-8 font-display text-2xl font-medium tracking-heading">
                 Comienza hoy en 3 simples pasos
               </h3>
-              <div className="space-y-6">
-                <div className="flex gap-4">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-navy text-paper-white font-bold text-xs">
-                    1
-                  </span>
-                  <div>
-                    <p className="text-sm font-bold text-charcoal">Crea tu cuenta de paciente</p>
-                    <p className="text-xs text-slate mt-1">
-                      Solo necesitas tus datos básicos para acceder a la agenda en vivo.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-terracotta text-paper-white font-bold text-xs">
-                    2
-                  </span>
-                  <div>
-                    <p className="text-sm font-bold text-charcoal">Selecciona tu psicólogo y horario</p>
-                    <p className="text-xs text-slate mt-1">
-                      Elige el día y bloque que mejor se ajuste a tu rutina diaria.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-navy-mid text-paper-white font-bold text-xs">
-                    3
-                  </span>
-                  <div>
-                    <p className="text-sm font-bold text-charcoal">Inicia tu proceso terapéutico</p>
-                    <p className="text-xs text-slate mt-1">
-                      Conéctate o asiste a consulta con el respaldo de un profesional de salud mental.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <ol className="relative space-y-7 border-l border-white/20 pl-8">
+                {pasos.map((paso, i) => (
+                  <li key={paso.titulo} className="relative">
+                    <span className="absolute -left-12 flex h-8 w-8 items-center justify-center rounded-full bg-axioma-300 text-xs font-bold text-axioma-950">
+                      {i + 1}
+                    </span>
+                    <p className="text-sm font-bold">{paso.titulo}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-axioma-200">{paso.texto}</p>
+                  </li>
+                ))}
+              </ol>
 
-              <div className="mt-8 pt-6 border-t border-frost">
+              <div className="mt-9 border-t border-white/15 pt-7">
                 <Link
-                  href={usuario?.rol === 'PACIENTE' ? '/paciente' : '/registro'}
-                  className="block text-center rounded-[40px] bg-terracotta py-3.5 text-sm font-semibold text-paper-white hover:bg-terracotta-hover transition"
+                  href={esPaciente ? '/paciente' : '/registro'}
+                  className={`${btnOnDark} ${tamLg} w-full`}
                 >
-                  {usuario?.rol === 'PACIENTE' ? 'Entrar a Mi Portal' : 'Registrarme Ahora'}
+                  {esPaciente ? 'Entrar a Mi Portal' : 'Registrarme Ahora'}
                 </Link>
               </div>
             </div>
@@ -678,53 +757,52 @@ export default function PaginaPrincipal() {
       </section>
 
       {/* 7. FOOTER */}
-      <footer className="bg-navy-deep text-paper-white py-12 px-6 lg:px-12 mt-auto">
-        <div className="max-w-[1280px] mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      <footer className="mt-auto bg-axioma-950 text-white">
+        <div className={`${contenedor} flex flex-col items-center justify-between gap-6 py-10 md:flex-row`}>
           <div className="flex items-center space-x-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-paper-white/10 text-terracotta">
-              <Heart className="h-5 w-5 fill-terracotta" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-axioma-300">
+              <Heart className="h-5 w-5 fill-axioma-300" />
             </div>
             <div>
-              <p className="text-base font-bold text-paper-white">Centro Psicológico Axioma</p>
-              <p className="text-xs text-sand/70">
+              <p className="text-base font-bold text-white">Centro Psicológico Axioma</p>
+              <p className="text-xs text-axioma-200">
                 Universidad Tecnológica del Perú · Curso Integrador II
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-6 text-xs text-sand/80">
-            <Link href="/login" className="hover:text-paper-white transition">Acceso Personal Médico</Link>
-            <Link href="/registro" className="hover:text-paper-white transition">Portal Pacientes</Link>
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-axioma-200">
+            <Link href="/login" className="transition hover:text-white">Acceso Personal Médico</Link>
+            <Link href="/registro" className="transition hover:text-white">Portal Pacientes</Link>
             <span>© 2026 Axioma. Todos los derechos reservados.</span>
           </div>
         </div>
       </footer>
 
-      {/* 8. STICKY BOTTOM NOTIFICATION */}
+      {/* 8. NOTIFICACIÓN FLOTANTE */}
       {mostrarNotificacion && (
-        <div className="fixed bottom-6 right-6 z-40 max-w-[340px] rounded-[16px] bg-navy p-4 text-paper-white border border-paper-white/10 shadow-none animate-fade-in">
+        <div className="fixed bottom-4 left-4 right-4 z-40 animate-fade-in rounded-card-sm border border-axioma-200 bg-white p-4 text-axiomaText-ink shadow-lift motion-reduce:animate-none sm:bottom-6 sm:left-auto sm:right-6 sm:max-w-[340px]">
           <div className="flex items-start justify-between">
             <div className="flex items-center space-x-2">
-              <span className="h-2 w-2 rounded-full bg-terracotta animate-ping" />
-              <span className="text-xs font-bold text-paper-white">Turnos Disponibles Hoy</span>
+              <span className="h-2 w-2 animate-ping rounded-full bg-axioma-500 motion-reduce:animate-none" />
+              <span className="text-xs font-bold text-axiomaText-ink">Turnos Disponibles Hoy</span>
             </div>
             <button
               onClick={() => setMostrarNotificacion(false)}
-              className="text-ash hover:text-paper-white transition"
+              className={`rounded-full p-0.5 text-axiomaText-soft transition hover:text-axiomaText-ink ${foco}`}
               aria-label="Cerrar notificación"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
-          <p className="mt-2 text-xs text-sand/90">
+          <p className="mt-2 text-xs leading-relaxed text-axiomaText-soft">
             Agenda abierta para consultas presenciales y virtuales con la Dra. Camila Morales.
           </p>
           <div className="mt-3 flex items-center justify-between">
-            <span className="text-[11px] font-mono text-ash">3 cupos libres</span>
-            <Link
-              href={usuario ? '/paciente' : '/registro'}
-              className="rounded-[40px] bg-terracotta px-3.5 py-1 text-xs font-semibold text-paper-white hover:bg-terracotta-hover transition"
-            >
+            <span className="rounded-tag bg-axioma-100 px-2.5 py-1 text-[11px] font-semibold text-axioma-700">
+              3 cupos libres
+            </span>
+            <Link href={destinoCta} className={`${btnPrimary} px-4 py-1.5 text-xs`}>
               Agendar Cupo
             </Link>
           </div>
