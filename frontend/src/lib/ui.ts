@@ -77,3 +77,20 @@ export const fechaCorta = (iso: string) =>
 
 export const horaCorta = (iso: string) =>
     new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+
+/** Obtiene la fecha YYYY-MM-DD en la zona horaria local del navegador */
+export const fechaYmdLocal = (isoOFecha: string | Date) => {
+    const d = new Date(isoOFecha);
+    const anio = d.getFullYear();
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    return `${anio}-${mes}-${dia}`;
+};
+
+/** Obtiene la hora HH:mm en la zona horaria local del navegador */
+export const horaHmLocal = (isoOFecha: string | Date) => {
+    const d = new Date(isoOFecha);
+    const hora = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${hora}:${min}`;
+};

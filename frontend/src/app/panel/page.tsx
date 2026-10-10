@@ -11,7 +11,7 @@ import { LogoAxioma } from '@/components/logo-axioma';
 import {
   btnPrimary, btnSecondary, btnIcono, tamMd, focoClaro,
   card, label, input, modalOverlay, modalWrap, modalCard,
-  thClase, tdClase, pastilla, claseEstadoCita, claseRiesgo, fechaCorta, horaCorta,
+  thClase, tdClase, pastilla, claseEstadoCita, claseRiesgo, fechaCorta, horaCorta, fechaYmdLocal, horaHmLocal,
 } from '@/lib/ui';
 
 type Tab = 'agenda' | 'psicologos' | 'pacientes' | 'paquetes';
@@ -51,6 +51,7 @@ export default function PanelStaff() {
 
   // Datos
   const [citas, setCitas] = useState<any[]>([]);
+  const [todasLasCitas, setTodasLasCitas] = useState<any[]>([]);
   const [psicologos, setPsicologos] = useState<any[]>([]);
   const [pacientes, setPacientes] = useState<any[]>([]);
   const [catalogoPaquetes, setCatalogoPaquetes] = useState<any[]>([]);

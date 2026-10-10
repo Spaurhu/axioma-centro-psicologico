@@ -9,7 +9,7 @@ import { LogoAxioma } from '@/components/logo-axioma';
 import {
   contenedor, btnPrimary, btnSecondary, btnOnDark, btnGhost, tamSm, tamMd,
   card, label, input, modalOverlay, modalWrap, modalCard,
-  thClase, tdClase, pastilla, claseEstadoCita, fechaCorta, horaCorta,
+  thClase, tdClase, pastilla, claseEstadoCita, fechaCorta, horaCorta, fechaYmdLocal, horaHmLocal,
 } from '@/lib/ui';
 
 // Superficies de las cards de paquetes
