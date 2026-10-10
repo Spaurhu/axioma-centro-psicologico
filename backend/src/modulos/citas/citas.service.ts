@@ -264,4 +264,47 @@ export class CitasService {
       });
     });
   }
+
+  async guardarEvolucion(citaId: string, dto: any) {
+    const cita = await this.prisma.cita.findUnique({
+      where: { id: citaId },
+      include: { evolucionClinica: true },
+    });
+
+    if (!cita) {
+      throw new NotFoundException('Cita no encontrada');
+    }
+
+    if (cita.evolucionClinica) {
+      return this.prisma.evolucionClinica.update({
+        where: { id: cita.evolucionClinica.id },
+        data: {
+          motivoConsulta: dto.motivoConsulta,
+          tecnicasUtilizadas: dto.tecnicasUtilizadas,
+          observacionesConductuales: dto.observacionesConductuales,
+          notaEvolucion: dto.notaEvolucion,
+          tareasCasa: dto.tareasCasa,
+        },
+      });
+    }
+
+    return this.prisma.evolucionClinica.create({
+      data: {
+        citaId,
+        pacienteId: cita.pacienteId,
+        psicologoId: cita.psicologoId,
+        motivoConsulta: dto.motivoConsulta,
+        tecnicasUtilizadas: dto.tecnicasUtilizadas,
+        observacionesConductuales: dto.observacionesConductuales,
+        notaEvolucion: dto.notaEvolucion,
+        tareasCasa: dto.tareasCasa,
+      },
+    });
+  }
+
+  async obtenerEvolucion(citaId: string) {
+    return this.prisma.evolucionClinica.findUnique({
+      where: { citaId },
+    });
+  }
 }

@@ -36,4 +36,14 @@ export class CitasController {
   async marcarAsistencia(@Param('id') id: string) {
     return this.citasService.marcarAsistencia(id);
   }
+
+  @Get(':id/evolucion')
+  async obtenerEvolucion(@Param('id') id: string) {
+    return this.citasService.obtenerEvolucion(id);
+  }
+
+  @Post(':id/evolucion')
+  async guardarEvolucion(@Param('id') id: string, @Body() dto: any) {
+    return this.citasService.guardarEvolucion(id, dto);
+  }
 }
