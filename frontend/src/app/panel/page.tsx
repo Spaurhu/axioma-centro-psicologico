@@ -159,13 +159,15 @@ export default function PanelStaff() {
     setCargando(true);
     try {
       const urlCitas = fechaFiltro ? `/citas?fecha=${fechaFiltro}` : '/citas';
-      const [dataCitas, dataPsicos, dataPacientes, dataPaquetes] = await Promise.all([
+      const [dataCitas, dataTodasCitas, dataPsicos, dataPacientes, dataPaquetes] = await Promise.all([
         apiFetch(urlCitas),
+        apiFetch('/citas'),
         apiFetch('/psicologos'),
         apiFetch('/pacientes'),
         apiFetch('/paquetes/catalogo'),
       ]);
       setCitas(dataCitas || []);
+      setTodasLasCitas(dataTodasCitas || []);
       setPsicologos(dataPsicos || []);
       setPacientes(dataPacientes || []);
       setCatalogoPaquetes(dataPaquetes || []);
@@ -185,12 +187,15 @@ export default function PanelStaff() {
   // Helper: Comprobar si un slot está ocupado por el psicólogo en esa fecha
   const esSlotOcupado = (psicologoId: string, fecha: string, horaInicioStr: string, excludeCitaId?: string) => {
     if (!psicologoId || !fecha || !horaInicioStr) return false;
-    const targetIsoPrefix = `${fecha}T${horaInicioStr}`;
-    return citas.some((c) => {
+    const fuenteCitas = todasLasCitas && todasLasCitas.length > 0 ? todasLasCitas : citas;
+    return fuenteCitas.some((c) => {
       if (c.estado === 'CANCELADA' || c.estado === 'REPROGRAMADA') return false;
       if (excludeCitaId && c.id === excludeCitaId) return false;
       if (c.psicologoId !== psicologoId) return false;
-      return c.fechaHoraInicio.startsWith(targetIsoPrefix);
+      
+      const cFechaLocal = fechaYmdLocal(c.fechaHoraInicio);
+      const cHoraLocal = horaHmLocal(c.fechaHoraInicio);
+      return cFechaLocal === fecha && cHoraLocal === horaInicioStr;
     });
   };
 

@@ -100,11 +100,12 @@ export default function PortalPaciente() {
   // Helper: Comprobar si un slot está ocupado por el psicólogo en esa fecha
   const esSlotOcupado = (psicologoId: string, fecha: string, horaInicioStr: string) => {
     if (!psicologoId || !fecha || !horaInicioStr) return false;
-    const targetIsoPrefix = `${fecha}T${horaInicioStr}`;
     return citasExistentes.some((c) => {
       if (c.estado === 'CANCELADA' || c.estado === 'REPROGRAMADA') return false;
       if (c.psicologoId !== psicologoId) return false;
-      return c.fechaHoraInicio.startsWith(targetIsoPrefix);
+      const cFechaLocal = fechaYmdLocal(c.fechaHoraInicio);
+      const cHoraLocal = horaHmLocal(c.fechaHoraInicio);
+      return cFechaLocal === fecha && cHoraLocal === horaInicioStr;
     });
   };
 
