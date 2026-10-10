@@ -12,25 +12,50 @@ import {
   thClase, tdClase, pastilla, claseEstadoCita, fechaCorta, horaCorta,
 } from '@/lib/ui';
 
-// Superficies de las cards de paquetes (se alternan para dar ritmo sin saturar)
+// Superficies de las cards de paquetes
 const fondosPaquete = [
   'bg-axioma-100 border-axioma-200',
   'bg-heather border-white/60',
   'bg-white border-axioma-200/70',
 ];
 
+// Generar bloques de horario de consulta
+const generarHorariosDisponibles = (fechaStr: string) => {
+  if (!fechaStr) return [];
+  const fecha = new Date(fechaStr + 'T00:00:00');
+  const dia = fecha.getDay(); // 0 = Domingo, 6 = Sábado
+  if (dia === 0) return []; // Domingos descanso
+
+  const horarios: { inicio: string; fin: string; etiqueta: string }[] = [];
+  const horaInicio = 9;
+  const horaFin = dia === 6 ? 13 : 18; // Sábados hasta 1pm, Lun-Vie hasta 6pm
+
+  for (let h = horaInicio; h < horaFin; h++) {
+    const hStr = h.toString().padStart(2, '0');
+    horarios.push({
+      inicio: `${hStr}:00`,
+      fin: `${hStr}:50`,
+      etiqueta: `${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? 'AM' : 'PM'} - ${h % 12 === 0 ? 12 : h % 12}:50 ${h < 12 ? 'AM' : 'PM'}`
+    });
+  }
+  return horarios;
+};
+
 export default function PortalPaciente() {
   const router = useRouter();
   const [usuario, setUsuario] = useState<any>(null);
   const [pacienteInfo, setPacienteInfo] = useState<any>(null);
   const [psicologos, setPsicologos] = useState<any[]>([]);
+  const [citasExistentes, setCitasExistentes] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [mostrarModalCita, setMostrarModalCita] = useState(false);
 
+  const hoyStr = new Date().toISOString().split('T')[0];
+
   const [formCita, setFormCita] = useState({
     psicologoId: '',
-    fechaHoraInicio: '',
-    fechaHoraFin: '',
+    fecha: hoyStr,
+    horarioIndex: '0',
     motivoConsulta: '',
   });
 
@@ -48,8 +73,12 @@ export default function PortalPaciente() {
   const cargarDatosPaciente = async (u: any) => {
     setCargando(true);
     try {
-      const dataPsicos = await apiFetch('/psicologos/publico');
+      const [dataPsicos, dataCitas] = await Promise.all([
+        apiFetch('/psicologos/publico'),
+        apiFetch('/citas'),
+      ]);
       setPsicologos(dataPsicos || []);
+      setCitasExistentes(dataCitas || []);
 
       if (u.perfil?.id) {
         const info = await apiFetch(`/pacientes/${u.perfil.id}`);
@@ -68,21 +97,55 @@ export default function PortalPaciente() {
     router.push('/');
   };
 
+  // Helper: Comprobar si un slot está ocupado por el psicólogo en esa fecha
+  const esSlotOcupado = (psicologoId: string, fecha: string, horaInicioStr: string) => {
+    if (!psicologoId || !fecha || !horaInicioStr) return false;
+    const targetIsoPrefix = `${fecha}T${horaInicioStr}`;
+    return citasExistentes.some((c) => {
+      if (c.estado === 'CANCELADA' || c.estado === 'REPROGRAMADA') return false;
+      if (c.psicologoId !== psicologoId) return false;
+      return c.fechaHoraInicio.startsWith(targetIsoPrefix);
+    });
+  };
+
   const handleAgendar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pacienteInfo?.id) return;
+
+    const bloques = generarHorariosDisponibles(formCita.fecha);
+    const bloque = bloques[parseInt(formCita.horarioIndex)] || bloques[0];
+    if (!bloque) {
+      alert('La fecha seleccionada no tiene horarios de atención en la clínica (domingos descanso).');
+      return;
+    }
+
+    const fechaHoraInicio = `${formCita.fecha}T${bloque.inicio}:00`;
+    const fechaHoraFin = `${formCita.fecha}T${bloque.fin}:00`;
+
+    if (new Date(fechaHoraInicio) < new Date()) {
+      alert('No se puede agendar una cita en una fecha u hora pasada.');
+      return;
+    }
+
+    if (esSlotOcupado(formCita.psicologoId, formCita.fecha, bloque.inicio)) {
+      alert('El horario seleccionado ya se encuentra ocupado con ese psicólogo.');
+      return;
+    }
 
     try {
       await apiFetch('/citas', {
         method: 'POST',
         body: JSON.stringify({
-          ...formCita,
           pacienteId: pacienteInfo.id,
+          psicologoId: formCita.psicologoId,
+          fechaHoraInicio,
+          fechaHoraFin,
+          motivoConsulta: formCita.motivoConsulta || 'Consulta terapéutica',
         }),
       });
       alert('✓ ¡Cita agendada con éxito en el sistema!');
       setMostrarModalCita(false);
-      setFormCita({ psicologoId: '', fechaHoraInicio: '', fechaHoraFin: '', motivoConsulta: '' });
+      setFormCita({ psicologoId: '', fecha: hoyStr, horarioIndex: '0', motivoConsulta: '' });
       cargarDatosPaciente(usuario);
     } catch (err: any) {
       alert(err.message || 'Error al agendar cita');
@@ -148,195 +211,147 @@ export default function PortalPaciente() {
           </div>
         </section>
 
-        {/* Paquetes activos */}
-        <section>
-          <h2 className="text-lg font-semibold tracking-heading text-axiomaText-ink">
-            Balance de paquetes terapéuticos
-          </h2>
+        {/* Sección: Mis Paquetes de Sesiones */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-xl font-medium tracking-heading text-axiomaText-ink sm:text-2xl">
+              Mis paquetes terapéuticos
+            </h2>
+            <span className="text-xs font-semibold text-axioma-700">
+              {paquetes.filter((p) => p.estado === 'ACTIVO').length} activo(s)
+            </span>
+          </div>
 
-          <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {cargando ? (
-              <div className={`${card} h-44 animate-pulse bg-axioma-100 motion-reduce:animate-none`} aria-hidden />
-            ) : paquetes.length > 0 ? (
-              paquetes.map((pp: any, idx: number) => {
-                const avance = pp.sesionesTotales ? (pp.sesionesConsumidas / pp.sesionesTotales) * 100 : 0;
-                return (
-                  <div
-                    key={pp.id}
-                    className={`rounded-card border p-6 shadow-card ${fondosPaquete[idx % fondosPaquete.length]}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="text-sm font-semibold text-axiomaText-ink">{pp.paquete?.nombre}</span>
-                      <span className={`${pastilla} border border-axioma-200 bg-white text-axioma-700`}>
-                        {pp.estado}
-                      </span>
-                    </div>
-
-                    <div className="mt-5">
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-display text-5xl font-medium tracking-heading text-axiomaText-ink">
-                          {pp.sesionesRestantes}
-                        </span>
-                        <span className="text-sm text-axiomaText-soft">
-                          sesiones restantes de {pp.sesionesTotales}
-                        </span>
-                      </div>
-
-                      <div
-                        className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-axioma-900/10"
-                        role="progressbar"
-                        aria-valuenow={Math.round(avance)}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-label="Sesiones consumidas"
-                      >
-                        <div
-                          className="h-full rounded-full bg-axioma-600 transition-all duration-300"
-                          style={{ width: `${avance}%` }}
-                        />
-                      </div>
-
-                      <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-axiomaText-soft">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-axioma-600" />
-                        <span>{pp.sesionesConsumidas} sesión(es) completadas y deducidas</span>
+          {paquetes.length === 0 ? (
+            <div className={`${card} p-8 text-center text-axiomaText-soft`}>
+              No cuentas con paquetes de sesiones activos actualmente.
+            </div>
+          ) : (
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {paquetes.map((p, idx) => (
+                <div
+                  key={p.id}
+                  className={`rounded-card border p-6 shadow-card transition-shadow hover:shadow-cardHover ${fondosPaquete[idx % fondosPaquete.length]}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-display text-lg font-medium tracking-heading text-axiomaText-ink">
+                        {p.paquete?.nombre || 'Paquete Terapéutico'}
+                      </h3>
+                      <p className="mt-0.5 text-xs text-axiomaText-soft">
+                        Comprado el {fechaCorta(p.fechaCompra)}
                       </p>
                     </div>
+                    <span
+                      className={`${pastilla} ${p.estado === 'ACTIVO' ? 'bg-axioma-700 text-white' : 'bg-axioma-200 text-axioma-800'}`}
+                    >
+                      {p.estado}
+                    </span>
                   </div>
-                );
-              })
-            ) : (
-              <div className={`${card} p-8 text-center sm:col-span-2`}>
-                <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-axioma-100 text-axioma-700">
-                  <PackageCheck className="h-6 w-6" />
-                </span>
-                <p className="mt-3 text-base font-semibold text-axiomaText-ink">
-                  No cuentas con un paquete activo actualmente
-                </p>
-                <p className="mx-auto mt-1 max-w-sm text-sm text-axiomaText-soft">
-                  Puedes reservar citas individuales o consultar los paquetes con descuento.
-                </p>
-                <button
-                  onClick={() => setMostrarModalCita(true)}
-                  className={`${btnPrimary} ${tamSm} mt-5`}
-                >
-                  <Calendar className="h-4 w-4" />
-                  <span>Reservar una cita</span>
-                </button>
-              </div>
-            )}
 
-            {/* Garantía de atención */}
-            <div className="flex flex-col justify-between rounded-card border border-axioma-900/10 bg-axioma-900 p-6 text-white shadow-card">
-              <div>
-                <span className="text-xs font-semibold text-axioma-300">Garantía de atención</span>
-                <h3 className="mt-2 font-display text-xl font-medium tracking-heading">
-                  Confirmación inmediata de turno
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-axioma-100">
-                  Tus reservas bloquean en tiempo real la agenda del psicólogo para garantizar puntualidad sin esperas en sala.
-                </p>
-              </div>
-              <div className="mt-5 border-t border-white/15 pt-3 text-xs font-semibold text-axioma-200">
-                Duración: 50 minutos por consulta
-              </div>
+                  <div className="mt-6 flex items-baseline justify-between">
+                    <div>
+                      <span className="font-display text-4xl font-medium tracking-heading text-axiomaText-ink">
+                        {p.sesionesRestantes}
+                      </span>
+                      <span className="ml-1 text-sm text-axiomaText-soft">
+                        / {p.sesionesTotales} restantes
+                      </span>
+                    </div>
+                    <span className="text-xs tabular-nums text-axiomaText-soft">
+                      {p.sesionesConsumidas} consumidas
+                    </span>
+                  </div>
+
+                  {/* Barra de progreso */}
+                  <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-axioma-900/10">
+                    <div
+                      className="h-full rounded-full bg-axioma-700 transition-all duration-300"
+                      style={{
+                        width: `${Math.round((p.sesionesConsumidas / p.sesionesTotales) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
         </section>
 
-        {/* Historial de citas */}
-        <section>
-          <h2 className="text-lg font-semibold tracking-heading text-axiomaText-ink">
-            Historial de consultas
-          </h2>
+        {/* Sección: Mis Citas Programadas e Historial */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-xl font-medium tracking-heading text-axiomaText-ink sm:text-2xl">
+              Historial y próximas consultas
+            </h2>
+            <span className="text-xs text-axiomaText-soft">{citas.length} registradas</span>
+          </div>
 
-          <div className="mt-4">
-            {citas.length === 0 ? (
-              <div className={`${card} px-6 py-10 text-center text-sm text-axiomaText-soft`}>
-                {cargando
-                  ? 'Cargando tus citas...'
-                  : 'No tienes citas registradas aún. ¡Haz clic en "Reservar nueva cita" para comenzar!'}
-              </div>
-            ) : (
-              <>
-                {/* Móvil: tarjetas */}
-                <div className="space-y-3 md:hidden">
-                  {citas.map((c: any) => (
-                    <div key={c.id} className={`${card} p-4`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-axiomaText-ink">
-                            {c.psicologo?.nombres} {c.psicologo?.apellidos}
-                          </p>
-                          <span className="text-xs text-axiomaText-soft">{c.psicologo?.especialidad}</span>
-                        </div>
-                        <span className={`${pastilla} ${claseEstadoCita(c.estado)}`}>{c.estado}</span>
-                      </div>
-                      <div className="mt-3 flex items-center gap-2 text-sm text-axiomaText-ink">
-                        <Calendar className="h-4 w-4 text-axioma-600" />
-                        <span className="font-medium">{fechaCorta(c.fechaHoraInicio)}</span>
-                        <span className="tabular-nums text-axiomaText-soft">{horaCorta(c.fechaHoraInicio)}</span>
-                      </div>
-                      <p className="mt-2 text-sm text-axiomaText-soft">{c.motivoConsulta || 'Consulta regular'}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Tablet y desktop: tabla */}
-                <div className={`${card} hidden overflow-hidden md:block`}>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm text-axiomaText-soft">
-                      <thead className="border-b border-axioma-100 bg-axioma-50">
-                        <tr>
-                          <th className={thClase}>Terapeuta</th>
-                          <th className={thClase}>Fecha y horario</th>
-                          <th className={thClase}>Motivo de sesión</th>
-                          <th className={thClase}>Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-axioma-100">
-                        {citas.map((c: any) => (
-                          <tr key={c.id} className="transition-colors hover:bg-axioma-50">
-                            <td className={tdClase}>
-                              <p className="font-semibold text-axiomaText-ink">
-                                {c.psicologo?.nombres} {c.psicologo?.apellidos}
-                              </p>
-                              <span className="text-xs text-axiomaText-soft">{c.psicologo?.especialidad}</span>
-                            </td>
-                            <td className={tdClase}>
-                              <p className="font-medium text-axiomaText-ink">{fechaCorta(c.fechaHoraInicio)}</p>
-                              <span className="text-xs tabular-nums text-axiomaText-soft">
-                                {horaCorta(c.fechaHoraInicio)}
-                              </span>
-                            </td>
-                            <td className={tdClase}>{c.motivoConsulta || 'Consulta regular'}</td>
-                            <td className={tdClase}>
-                              <span className={`${pastilla} ${claseEstadoCita(c.estado)}`}>{c.estado}</span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </>
-            )}
+          <div className={`${card} overflow-hidden`}>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-left text-sm text-axiomaText-soft">
+                <thead className="border-b border-axioma-100 bg-axioma-50">
+                  <tr>
+                    <th className={thClase}>Fecha y hora</th>
+                    <th className={thClase}>Terapeuta</th>
+                    <th className={thClase}>Especialidad</th>
+                    <th className={thClase}>Motivo</th>
+                    <th className={`${thClase} text-right`}>Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-axioma-100">
+                  {citas.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-axiomaText-soft">
+                        {cargando ? 'Cargando información...' : 'No tienes citas registradas en tu historial.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    citas.map((c) => (
+                      <tr key={c.id} className="transition-colors hover:bg-axioma-50">
+                        <td className={tdClase}>
+                          <p className="font-medium text-axiomaText-ink">{fechaCorta(c.fechaHoraInicio)}</p>
+                          <span className="text-xs tabular-nums text-axiomaText-soft">
+                            {horaCorta(c.fechaHoraInicio)} - {horaCorta(c.fechaHoraFin)}
+                          </span>
+                        </td>
+                        <td className={`${tdClase} font-semibold text-axiomaText-ink`}>
+                          {c.psicologo?.nombres} {c.psicologo?.apellidos}
+                        </td>
+                        <td className={tdClase}>
+                          {c.psicologo?.especialidad || 'Psicología Clínica'}
+                        </td>
+                        <td className={tdClase}>
+                          <span className="line-clamp-1">{c.motivoConsulta || 'Consulta general'}</span>
+                        </td>
+                        <td className={`${tdClase} text-right`}>
+                          <span className={`${pastilla} ${claseEstadoCita(c.estado)}`}>
+                            {c.estado}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       </main>
 
-      {/* Modal: reservar cita */}
+      {/* Modal: Reservar Cita en Bloques Predefinidos Clínicos */}
       {mostrarModalCita && (
         <div className={modalOverlay}>
           <div className={modalWrap}>
-            <div className={`${modalCard} max-w-lg`} role="dialog" aria-modal="true" aria-labelledby="titulo-modal-cita">
-              <h3 id="titulo-modal-cita" className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink">
-                Reservar cita psicológica
+            <div className={`${modalCard} max-w-lg`} role="dialog" aria-modal="true" aria-labelledby="titulo-modal">
+              <h3 id="titulo-modal" className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink">
+                Reservar consulta psicológica
               </h3>
               <p className="mt-1 text-sm leading-relaxed text-axiomaText-soft">
-                Selecciona tu terapeuta y horario preferido. Si tienes paquete activo, se vinculará automáticamente.
+                Horario de atención: Lun-Vie (9am a 6pm) y Sáb (9am a 1pm). Sesiones de 50 minutos.
               </p>
 
-              <form onSubmit={handleAgendar} className="mt-6 space-y-5">
+              <form onSubmit={handleAgendar} className="mt-6 space-y-4">
                 <div>
                   <label htmlFor="psicologoId" className={label}>
                     Psicólogo especialista
@@ -357,32 +372,36 @@ export default function PortalPaciente() {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="fechaInicio" className={label}>
-                      Fecha y hora de inicio
-                    </label>
+                    <label htmlFor="fechaCita" className={label}>Fecha</label>
                     <input
-                      id="fechaInicio"
-                      type="datetime-local"
+                      id="fechaCita"
+                      type="date"
                       required
-                      value={formCita.fechaHoraInicio}
-                      onChange={(e) => setFormCita({ ...formCita, fechaHoraInicio: e.target.value })}
+                      min={hoyStr}
+                      value={formCita.fecha}
+                      onChange={(e) => setFormCita({ ...formCita, fecha: e.target.value, horarioIndex: '0' })}
                       className={input}
                     />
                   </div>
                   <div>
-                    <label htmlFor="fechaFin" className={label}>
-                      Fecha y hora de fin (50 min)
-                    </label>
-                    <input
-                      id="fechaFin"
-                      type="datetime-local"
-                      required
-                      value={formCita.fechaHoraFin}
-                      onChange={(e) => setFormCita({ ...formCita, fechaHoraFin: e.target.value })}
+                    <label htmlFor="horarioSelect" className={label}>Horario (50 min)</label>
+                    <select
+                      id="horarioSelect"
+                      value={formCita.horarioIndex}
+                      onChange={(e) => setFormCita({ ...formCita, horarioIndex: e.target.value })}
                       className={input}
-                    />
+                    >
+                      {generarHorariosDisponibles(formCita.fecha).map((h, i) => {
+                        const ocupado = esSlotOcupado(formCita.psicologoId, formCita.fecha, h.inicio);
+                        return (
+                          <option key={i} value={i} disabled={ocupado}>
+                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
                   </div>
                 </div>
 

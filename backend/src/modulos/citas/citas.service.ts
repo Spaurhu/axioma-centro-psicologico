@@ -15,6 +15,11 @@ export class CitasService {
   async crear(dto: CrearCitaDto) {
     const inicio = new Date(dto.fechaHoraInicio);
     const fin = new Date(dto.fechaHoraFin);
+    const ahora = new Date();
+
+    if (inicio < ahora) {
+      throw new BadRequestException('No se puede registrar una cita en una fecha u hora pasada');
+    }
 
     if (fin <= inicio) {
       throw new BadRequestException('La hora de fin debe ser posterior a la hora de inicio');
@@ -165,6 +170,11 @@ export class CitasService {
 
     const nuevaInicio = new Date(dto.nuevaFechaHoraInicio);
     const nuevaFin = new Date(dto.nuevaFechaHoraFin);
+    const ahora = new Date();
+
+    if (nuevaInicio < ahora) {
+      throw new BadRequestException('No se puede reprogramar una cita a una fecha u hora pasada');
+    }
 
     if (nuevaFin <= nuevaInicio) {
       throw new BadRequestException('La nueva hora de fin debe ser posterior a la de inicio');
@@ -231,6 +241,17 @@ export class CitasService {
 
     if (cita.estado === EstadoCita.ATENDIDA) {
       throw new BadRequestException('La cita ya fue marcada como atendida');
+    }
+
+    // Regla de Negocio Clínica: No se puede marcar asistencia de una cita antes de su fecha/hora (máx 30 min de margen previo)
+    const ahora = new Date();
+    const tiempoHastaInicio = new Date(cita.fechaHoraInicio).getTime() - ahora.getTime();
+    const margenPermitidoMs = 30 * 60 * 1000; // 30 minutos
+
+    if (tiempoHastaInicio > margenPermitidoMs) {
+      throw new BadRequestException(
+        'No se puede marcar asistencia anticipada. La cita está programada para una fecha u hora futura.',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {

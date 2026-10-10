@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Users, UserCheck, Calendar, PackageCheck, Plus, LogOut,
-  BrainCircuit, RefreshCw, X, Search, Edit3, CalendarClock,
-  Sparkles, Check, ChevronLeft, ChevronRight, FileText
+  BrainCircuit, RefreshCw, X, Search, CalendarClock
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { LogoAxioma } from '@/components/logo-axioma';
@@ -35,7 +34,6 @@ const generarHorariosDisponibles = (fechaStr: string) => {
   const horaFin = dia === 6 ? 13 : 18; // Sábados hasta 1pm, Lun-Vie hasta 6pm
 
   for (let h = horaInicio; h < horaFin; h++) {
-    // Bloque 1: xx:00 a xx:50
     const hStr = h.toString().padStart(2, '0');
     horarios.push({
       inicio: `${hStr}:00`,
@@ -80,17 +78,19 @@ export default function PanelStaff() {
 
   const [mostrarModalCrearPaquete, setMostrarModalCrearPaquete] = useState(false);
 
+  const hoyStr = new Date().toISOString().split('T')[0];
+
   // Formularios
   const [formCita, setFormCita] = useState({
     pacienteId: '',
     psicologoId: '',
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: hoyStr,
     horarioIndex: '0',
     motivoConsulta: '',
   });
 
   const [formReprogramar, setFormReprogramar] = useState({
-    fecha: '',
+    fecha: hoyStr,
     horarioIndex: '0',
     motivoReprogramacion: '',
   });
@@ -181,11 +181,31 @@ export default function PanelStaff() {
     router.push('/login');
   };
 
+  // Helper: Comprobar si un slot está ocupado por el psicólogo en esa fecha
+  const esSlotOcupado = (psicologoId: string, fecha: string, horaInicioStr: string, excludeCitaId?: string) => {
+    if (!psicologoId || !fecha || !horaInicioStr) return false;
+    const targetIsoPrefix = `${fecha}T${horaInicioStr}`;
+    return citas.some((c) => {
+      if (c.estado === 'CANCELADA' || c.estado === 'REPROGRAMADA') return false;
+      if (excludeCitaId && c.id === excludeCitaId) return false;
+      if (c.psicologoId !== psicologoId) return false;
+      return c.fechaHoraInicio.startsWith(targetIsoPrefix);
+    });
+  };
+
   // --- ACCIONES DE CITAS ---
-  const handleMarcarAsistencia = async (citaId: string) => {
+  const handleMarcarAsistencia = async (c: any) => {
+    // Validar en el cliente que no sea fecha futura
+    const ahora = new Date();
+    const tiempoHastaInicio = new Date(c.fechaHoraInicio).getTime() - ahora.getTime();
+    if (tiempoHastaInicio > 30 * 60 * 1000) {
+      alert('⚠️ No se puede marcar asistencia anticipada. La cita está programada para una fecha u hora futura.');
+      return;
+    }
+
     if (!confirm('¿Desea marcar asistencia para esta sesión? Se descontará automáticamente 1 sesión del paquete del paciente.')) return;
     try {
-      await apiFetch(`/citas/${citaId}/asistencia`, { method: 'PATCH' });
+      await apiFetch(`/citas/${c.id}/asistencia`, { method: 'PATCH' });
       cargarDatos();
     } catch (err: any) {
       alert(err.message || 'Error al marcar asistencia');
@@ -204,6 +224,16 @@ export default function PanelStaff() {
     const fechaHoraInicio = `${formCita.fecha}T${bloque.inicio}:00`;
     const fechaHoraFin = `${formCita.fecha}T${bloque.fin}:00`;
 
+    if (new Date(fechaHoraInicio) < new Date()) {
+      alert('No se puede agendar una cita en una fecha u hora que ya ha pasado.');
+      return;
+    }
+
+    if (esSlotOcupado(formCita.psicologoId, formCita.fecha, bloque.inicio)) {
+      alert('El horario seleccionado ya se encuentra ocupado por otra cita con el terapeuta.');
+      return;
+    }
+
     try {
       await apiFetch('/citas', {
         method: 'POST',
@@ -215,11 +245,12 @@ export default function PanelStaff() {
           motivoConsulta: formCita.motivoConsulta || 'Consulta terapéutica',
         }),
       });
+      alert('✓ Cita agendada exitosamente.');
       setMostrarModalCita(false);
       setFormCita({
         pacienteId: '',
         psicologoId: '',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyStr,
         horarioIndex: '0',
         motivoConsulta: '',
       });
@@ -233,7 +264,7 @@ export default function PanelStaff() {
     setCitaSeleccionadaParaReprog(cita);
     const fechaActual = cita.fechaHoraInicio.split('T')[0];
     setFormReprogramar({
-      fecha: fechaActual,
+      fecha: fechaActual >= hoyStr ? fechaActual : hoyStr,
       horarioIndex: '0',
       motivoReprogramacion: '',
     });
@@ -253,6 +284,16 @@ export default function PanelStaff() {
     const nuevaFechaHoraInicio = `${formReprogramar.fecha}T${bloque.inicio}:00`;
     const nuevaFechaHoraFin = `${formReprogramar.fecha}T${bloque.fin}:00`;
 
+    if (new Date(nuevaFechaHoraInicio) < new Date()) {
+      alert('No se puede reprogramar la cita a una fecha u hora pasada.');
+      return;
+    }
+
+    if (esSlotOcupado(citaSeleccionadaParaReprog.psicologoId, formReprogramar.fecha, bloque.inicio, citaSeleccionadaParaReprog.id)) {
+      alert('El horario seleccionado ya está reservado por otra cita.');
+      return;
+    }
+
     try {
       await apiFetch(`/citas/${citaSeleccionadaParaReprog.id}/reprogramar`, {
         method: 'PUT',
@@ -270,10 +311,9 @@ export default function PanelStaff() {
     }
   };
 
-  // --- NOTA CLÍNICA SOAP (PERSISTENTE Y COMPLETA) ---
+  // --- NOTA CLÍNICA SOAP (PERSISTENTE UTF-8) ---
   const abrirModalNota = async (cita: any) => {
     setCitaSeleccionadaParaNota(cita);
-    // Intentar cargar la nota guardada previamente
     try {
       const evolucion = await apiFetch(`/citas/${cita.id}/evolucion`);
       if (evolucion) {
@@ -568,7 +608,7 @@ export default function PanelStaff() {
                 <RefreshCw className={`h-4 w-4 ${cargando ? 'animate-spin motion-reduce:animate-none' : ''}`} />
               </button>
 
-              {/* Botón Agendar Cita (Disponible para Admin y Psicólogo) */}
+              {/* Botón Agendar Cita */}
               {tabActiva === 'agenda' && (
                 <button onClick={() => setMostrarModalCita(true)} className={`${btnPrimary} ${tamMd}`}>
                   <Plus className="h-4 w-4" />
@@ -664,9 +704,8 @@ export default function PanelStaff() {
                   )}
                   <button
                     onClick={() => {
-                      const hoy = new Date().toISOString().split('T')[0];
-                      setFiltroFechaCitas(hoy);
-                      cargarDatos(hoy);
+                      setFiltroFechaCitas(hoyStr);
+                      cargarDatos(hoyStr);
                     }}
                     className={`${btnSecondary} px-3 py-1.5 text-xs`}
                   >
@@ -741,7 +780,7 @@ export default function PanelStaff() {
                                 {c.estado === 'PROGRAMADA' && (
                                   <>
                                     <button
-                                      onClick={() => handleMarcarAsistencia(c.id)}
+                                      onClick={() => handleMarcarAsistencia(c)}
                                       className={`${btnPrimary} px-3 py-1.5 text-xs`}
                                     >
                                       Asistencia
@@ -924,7 +963,7 @@ export default function PanelStaff() {
       </main>
 
       {/* ========================================================================= */}
-      {/* MODAL 1: AGENDAR CITA CON INTERVALOS Y HORARIOS DE CLÍNICA */}
+      {/* MODAL 1: AGENDAR CITA CON FILTRADO EN TIEMPO REAL DE HORARIOS OCUPADOS */}
       {/* ========================================================================= */}
       {mostrarModalCita && (
         <div className={modalOverlay}>
@@ -977,6 +1016,7 @@ export default function PanelStaff() {
                       id="fechaCita"
                       type="date"
                       required
+                      min={hoyStr}
                       value={formCita.fecha}
                       onChange={(e) => setFormCita({ ...formCita, fecha: e.target.value, horarioIndex: '0' })}
                       className={input}
@@ -990,9 +1030,14 @@ export default function PanelStaff() {
                       onChange={(e) => setFormCita({ ...formCita, horarioIndex: e.target.value })}
                       className={input}
                     >
-                      {generarHorariosDisponibles(formCita.fecha).map((h, i) => (
-                        <option key={i} value={i}>{h.etiqueta}</option>
-                      ))}
+                      {generarHorariosDisponibles(formCita.fecha).map((h, i) => {
+                        const ocupado = esSlotOcupado(formCita.psicologoId, formCita.fecha, h.inicio);
+                        return (
+                          <option key={i} value={i} disabled={ocupado}>
+                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
@@ -1024,7 +1069,7 @@ export default function PanelStaff() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: REPROGRAMAR CITA (HU-11) */}
+      {/* MODAL 2: REPROGRAMAR CITA CON FILTRADO EN TIEMPO REAL */}
       {/* ========================================================================= */}
       {mostrarModalReprogramar && citaSeleccionadaParaReprog && (
         <div className={modalOverlay}>
@@ -1045,6 +1090,7 @@ export default function PanelStaff() {
                       id="fechaReprog"
                       type="date"
                       required
+                      min={hoyStr}
                       value={formReprogramar.fecha}
                       onChange={(e) => setFormReprogramar({ ...formReprogramar, fecha: e.target.value, horarioIndex: '0' })}
                       className={input}
@@ -1058,9 +1104,19 @@ export default function PanelStaff() {
                       onChange={(e) => setFormReprogramar({ ...formReprogramar, horarioIndex: e.target.value })}
                       className={input}
                     >
-                      {generarHorariosDisponibles(formReprogramar.fecha).map((h, i) => (
-                        <option key={i} value={i}>{h.etiqueta}</option>
-                      ))}
+                      {generarHorariosDisponibles(formReprogramar.fecha).map((h, i) => {
+                        const ocupado = esSlotOcupado(
+                          citaSeleccionadaParaReprog.psicologoId,
+                          formReprogramar.fecha,
+                          h.inicio,
+                          citaSeleccionadaParaReprog.id
+                        );
+                        return (
+                          <option key={i} value={i} disabled={ocupado}>
+                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>

@@ -3,6 +3,10 @@ import { IsEmail, IsOptional, IsString, IsBoolean } from 'class-validator';
 export class ActualizarPacienteDto {
   @IsOptional()
   @IsString()
+  dni?: string;
+
+  @IsOptional()
+  @IsString()
   nombres?: string;
 
   @IsOptional()
