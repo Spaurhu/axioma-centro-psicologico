@@ -92,3 +92,6 @@ $RECYCLE.BIN/
 
 Avance 1.docx
 Estructura del proyecto.docx
+# Backups de base de datos
+backups/
+*.sql

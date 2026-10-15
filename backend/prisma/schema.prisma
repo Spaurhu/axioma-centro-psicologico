@@ -17,6 +17,7 @@ generator client {
 
 enum Rol {
   ADMINISTRADOR
+  RECEPCIONISTA
   PSICOLOGO
   PACIENTE
 }
@@ -24,16 +25,37 @@ enum Rol {
 enum EstadoCita {
   PROGRAMADA      // Agendada en el sistema
   CONFIRMADA      // Confirmada por el paciente/centro
-  ATENDIDA        // Sesión realizada con éxito (descuenta paquete)
+  ATENDIDA        // Sesión realizada con éxito (descuenta paquete si es terapia)
   CANCELADA       // Cancelada por el paciente o terapeuta
   REPROGRAMADA    // Modificada de fecha/hora
   NO_ASISTIO      // Paciente no acudió a la sesión (no-show)
 }
 
+enum TipoCita {
+  EVALUACION      // Primera sesión de evaluación clínica (RN-01, cobro individual, no descuenta paquete)
+  TERAPIA         // Sesión regular de psicoterapia (RN-02, 50 min atención + 10 min transición = 60 min bloque)
+}
+
+enum TipoMovimientoSesion {
+  CONSUMO         // Descuento por asistencia a terapia (-1)
+  PENALIZACION    // Descuento por inasistencia o cancelación tardía < 24h (-1)
+  REVERSION       // Devolución por corrección de error administrativo (+1)
+  COMPRA          // Carga inicial al asignar/comprar paquete (+N)
+  AJUSTE          // Ajuste manual por el administrador (+/- N)
+}
+
+enum MotivoAlta {
+  CUMPLIMIENTO_OBJETIVOS
+  ABANDONO
+  DERIVACION
+  VOLUNTARIA
+  OTRO
+}
+
 enum EstadoPaquete {
   ACTIVO          // Con sesiones disponibles a favor
   AGOTADO         // Todas las sesiones fueron consumidas
-  VENCIDO         // Expiró la vigencia del paquete
+  VENCIDO         // Expiró la vigencia del paquete (90 días)
   CANCELADO       // Anulado administrativamente
 }
 
@@ -58,16 +80,17 @@ enum DiaSemana {
 // -------------------------------------------------------------
 
 model Usuario {
-  id              String       @id @default(uuid())
-  correo          String       @unique @db.VarChar(150)
-  contrasenaHash  String       @map("contrasena_hash") @db.VarChar(255)
-  rol             Rol          @default(ADMINISTRADOR)
-  estaActivo      Boolean      @default(true) @map("esta_activo")
-  creadoEn        DateTime     @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn   DateTime     @updatedAt @map("actualizado_en") @db.Timestamptz
+  id              String          @id @default(uuid())
+  correo          String          @unique @db.VarChar(150)
+  contrasenaHash  String          @map("contrasena_hash") @db.VarChar(255)
+  rol             Rol             @default(ADMINISTRADOR)
+  estaActivo      Boolean         @default(true) @map("esta_activo")
+  creadoEn        DateTime        @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn   DateTime        @updatedAt @map("actualizado_en") @db.Timestamptz
 
   psicologo       Psicologo?
   paciente        Paciente?
+  logsAuditoria   LogAuditoria[]
 
   @@map("usuarios")
 }
@@ -77,25 +100,28 @@ model Usuario {
 // -------------------------------------------------------------
 
 model Psicologo {
-  id                  String                    @id @default(uuid())
-  usuarioId           String                    @unique @map("usuario_id")
-  usuario             Usuario                   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  dni                 String                    @unique @db.VarChar(15)
-  nombres             String                    @db.VarChar(100)
-  apellidos           String                    @db.VarChar(100)
-  telefono            String?                   @db.VarChar(20)
-  numeroColegiatura   String?                   @map("numero_colegiatura") @db.VarChar(25) // C.Ps.P.
-  especialidad        String?                   @db.VarChar(120) // Ej. Terapia Cognitivo Conductual, Infantil, Pareja
-  tarifaPorSesion     Decimal?                  @map("tarifa_por_sesion") @db.Decimal(10, 2)
-  biografia           String?                   @db.Text
-  fotoUrl             String?                   @map("foto_url") @db.VarChar(255)
-  estaActivo          Boolean                   @default(true) @map("esta_activo")
-  creadoEn            DateTime                  @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn       DateTime                  @updatedAt @map("actualizado_en") @db.Timestamptz
+  id                  String                      @id @default(uuid())
+  usuarioId           String                      @unique @map("usuario_id")
+  usuario             Usuario                     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  dni                 String                      @unique @db.VarChar(15)
+  nombres             String                      @db.VarChar(100)
+  apellidos           String                      @db.VarChar(100)
+  telefono            String?                     @db.VarChar(20)
+  numeroColegiatura   String?                     @map("numero_colegiatura") @db.VarChar(25) // C.Ps.P.
+  especialidad        String?                     @db.VarChar(120) // Ej. Terapia Cognitivo Conductual, Infantil, Pareja
+  tarifaPorSesion     Decimal?                    @map("tarifa_por_sesion") @db.Decimal(10, 2)
+  biografia           String?                     @db.Text
+  fotoUrl             String?                     @map("foto_url") @db.VarChar(255)
+  estaActivo          Boolean                     @default(true) @map("esta_activo")
+  creadoEn            DateTime                    @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn       DateTime                    @updatedAt @map("actualizado_en") @db.Timestamptz
 
   disponibilidades    DisponibilidadPsicologo[]
   citas               Cita[]
   evolucionesClinicas EvolucionClinica[]
+  evaluaciones        HistoriaClinicaEvaluacion[]
+  planesTratamiento   PlanTratamiento[]
+  informesAlta        InformeAlta[]
 
   @@map("psicologos")
 }
@@ -105,8 +131,8 @@ model DisponibilidadPsicologo {
   psicologoId   String     @map("psicologo_id")
   psicologo     Psicologo  @relation(fields: [psicologoId], references: [id], onDelete: Cascade)
   diaSemana     DiaSemana  @map("dia_semana")
-  horaInicio    String     @map("hora_inicio") @db.VarChar(5) // Formato "08:00"
-  horaFin       String     @map("hora_fin") @db.VarChar(5)    // Formato "13:00"
+  horaInicio    String     @map("hora_inicio") @db.VarChar(5) // Formato "09:00"
+  horaFin       String     @map("hora_fin") @db.VarChar(5)    // Formato "18:00"
   estaActivo    Boolean    @default(true) @map("esta_activo")
 
   @@index([psicologoId])
@@ -114,34 +140,73 @@ model DisponibilidadPsicologo {
 }
 
 // -------------------------------------------------------------
+// MODELO DE CONFIGURACIÓN DE HORARIOS DEL CENTRO (RN-34, RN-35, RN-37)
+// -------------------------------------------------------------
+
+model ConfiguracionHorario {
+  id                   String     @id @default(uuid())
+  diaSemana            DiaSemana  @unique @map("dia_semana")
+  horaInicio           String?    @map("hora_inicio") @db.VarChar(5) // Ej: "09:00"
+  horaFin              String?    @map("hora_fin") @db.VarChar(5)    // Ej: "18:00" (L-V) o "13:00" (Sáb)
+  tieneRefrigerio      Boolean    @default(true) @map("tiene_refrigerio")
+  horaInicioRefrigerio String?    @map("hora_inicio_refrigerio") @db.VarChar(5) // Ej: "13:00"
+  horaFinRefrigerio    String?    @map("hora_fin_refrigerio") @db.VarChar(5)    // Ej: "14:00"
+  activo               Boolean    @default(true)
+  creadoEn             DateTime   @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn        DateTime   @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  @@map("configuracion_horarios")
+}
+
+// -------------------------------------------------------------
+// MODELO DE FERIADOS Y DÍAS NO LABORABLES (RN-36, RN-40, RN-42)
+// -------------------------------------------------------------
+
+model Feriado {
+  id            String    @id @default(uuid())
+  fecha         DateTime  @unique @db.Date
+  descripcion   String    @db.VarChar(150)
+  activo        Boolean   @default(true)
+  creadoEn      DateTime  @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn DateTime  @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  @@index([fecha, activo])
+  @@map("feriados")
+}
+
+// -------------------------------------------------------------
 // MODELO DE PACIENTES (Sprint 2)
 // -------------------------------------------------------------
 
 model Paciente {
-  id                  String              @id @default(uuid())
-  usuarioId           String?             @unique @map("usuario_id") // Opcional: si tiene cuenta web creada
-  usuario             Usuario?            @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
-  dni                 String              @unique @db.VarChar(15)
-  nombres             String              @db.VarChar(100)
-  apellidos           String              @db.VarChar(100)
-  telefono            String?             @db.VarChar(20)
-  correo              String?             @db.VarChar(150)
-  fechaNacimiento     DateTime?           @map("fecha_nacimiento") @db.Date
-  genero              String?             @db.VarChar(20)
-  direccion           String?             @db.VarChar(200)
+  id                  String                      @id @default(uuid())
+  usuarioId           String?                     @unique @map("usuario_id") // Opcional: si tiene cuenta web creada
+  usuario             Usuario?                    @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  dni                 String                      @unique @db.VarChar(15)
+  nombres             String                      @db.VarChar(100)
+  apellidos           String                      @db.VarChar(100)
+  telefono            String?                     @db.VarChar(20)
+  correo              String?                     @db.VarChar(150)
+  fechaNacimiento     DateTime?                   @map("fecha_nacimiento") @db.Date
+  genero              String?                     @db.VarChar(20)
+  direccion           String?                     @db.VarChar(200)
   
   // Datos de apoderado (en caso de pacientes menores de edad)
-  nombreApoderado     String?             @map("nombre_apoderado") @db.VarChar(150)
-  dniApoderado        String?             @map("dni_apoderado") @db.VarChar(15)
-  telefonoApoderado   String?             @map("telefono_apoderado") @db.VarChar(20)
+  nombreApoderado     String?                     @map("nombre_apoderado") @db.VarChar(150)
+  dniApoderado        String?                     @map("dni_apoderado") @db.VarChar(15)
+  telefonoApoderado   String?                     @map("telefono_apoderado") @db.VarChar(20)
 
-  estaActivo          Boolean             @default(true) @map("esta_activo")
-  creadoEn            DateTime            @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn       DateTime            @updatedAt @map("actualizado_en") @db.Timestamptz
+  estaActivo          Boolean                     @default(true) @map("esta_activo")
+  creadoEn            DateTime                    @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn       DateTime                    @updatedAt @map("actualizado_en") @db.Timestamptz
 
   paquetesPaciente    PaquetePaciente[]
   citas               Cita[]
   evolucionesClinicas EvolucionClinica[]
+  evaluaciones        HistoriaClinicaEvaluacion[]
+  planesTratamiento   PlanTratamiento[]
+  consentimientos     ConsentimientoInformado[]
+  informesAlta        InformeAlta[]
 
   @@index([dni])
   @@map("pacientes")
@@ -157,7 +222,7 @@ model Paquete {
   cantidadSesiones    Int               @map("cantidad_sesiones")
   precio              Decimal           @db.Decimal(10, 2)
   descripcion         String?           @db.Text
-  vigenciaDias        Int               @default(90) @map("vigencia_dias") // Días de validez
+  vigenciaDias        Int               @default(90) @map("vigencia_dias") // 90 días de validez (RN-07)
   estaActivo          Boolean           @default(true) @map("esta_activo")
   creadoEn            DateTime          @default(now()) @map("creado_en") @db.Timestamptz
 
@@ -167,22 +232,45 @@ model Paquete {
 }
 
 model PaquetePaciente {
-  id                  String         @id @default(uuid())
-  pacienteId          String         @map("paciente_id")
-  paqueteId           String         @map("paquete_id")
-  paciente            Paciente       @relation(fields: [pacienteId], references: [id])
-  paquete             Paquete        @relation(fields: [paqueteId], references: [id])
-  sesionesTotales     Int            @map("sesiones_totales")
-  sesionesConsumidas  Int            @default(0) @map("sesiones_consumidas")
-  sesionesRestantes   Int            @map("sesiones_restantes")
-  estado              EstadoPaquete  @default(ACTIVO)
-  fechaCompra         DateTime       @default(now()) @map("fecha_compra") @db.Timestamptz
-  fechaExpiracion     DateTime?      @map("fecha_expiracion") @db.Timestamptz
+  id                  String             @id @default(uuid())
+  pacienteId          String             @map("paciente_id")
+  paqueteId           String             @map("paquete_id")
+  paciente            Paciente           @relation(fields: [pacienteId], references: [id])
+  paquete             Paquete            @relation(fields: [paqueteId], references: [id])
+  sesionesTotales     Int                @map("sesiones_totales")
+  sesionesConsumidas  Int                @default(0) @map("sesiones_consumidas")
+  sesionesRestantes   Int                @map("sesiones_restantes")
+  estado              EstadoPaquete      @default(ACTIVO)
+  fechaCompra         DateTime           @default(now()) @map("fecha_compra") @db.Timestamptz
+  fechaExpiracion     DateTime?          @map("fecha_expiracion") @db.Timestamptz
 
   citas               Cita[]
+  movimientos         MovimientoSesion[]
 
   @@index([pacienteId])
   @@map("paquetes_paciente")
+}
+
+// -------------------------------------------------------------
+// MODELO DE MOVIMIENTOS DE SESIÓN (RN-44, RN-45, RN-46)
+// -------------------------------------------------------------
+
+model MovimientoSesion {
+  id                String               @id @default(uuid())
+  paquetePacienteId String               @map("paquete_paciente_id")
+  citaId            String?              @map("cita_id")
+  paquetePaciente   PaquetePaciente      @relation(fields: [paquetePacienteId], references: [id], onDelete: Cascade)
+  cita              Cita?                @relation(fields: [citaId], references: [id], onDelete: SetNull)
+
+  tipo              TipoMovimientoSesion
+  cantidad          Int                  // -1 (consumo/penalización), +1 (reversión), +N (compra)
+  fecha             DateTime             @default(now()) @db.Timestamptz
+  motivo            String?              @db.VarChar(255)
+
+  @@unique([citaId, tipo])
+  @@index([paquetePacienteId])
+  @@index([fecha])
+  @@map("movimientos_sesion")
 }
 
 // -------------------------------------------------------------
@@ -190,28 +278,31 @@ model PaquetePaciente {
 // -------------------------------------------------------------
 
 model Cita {
-  id                        String             @id @default(uuid())
-  pacienteId                String             @map("paciente_id")
-  psicologoId               String             @map("psicologo_id")
-  paquetePacienteId         String?            @map("paquete_paciente_id")
-  paciente                  Paciente           @relation(fields: [pacienteId], references: [id])
-  psicologo                 Psicologo          @relation(fields: [psicologoId], references: [id])
-  paquetePaciente           PaquetePaciente?   @relation(fields: [paquetePacienteId], references: [id])
+  id                        String                     @id @default(uuid())
+  pacienteId                String                     @map("paciente_id")
+  psicologoId               String                     @map("psicologo_id")
+  paquetePacienteId         String?                    @map("paquete_paciente_id")
+  paciente                  Paciente                   @relation(fields: [pacienteId], references: [id])
+  psicologo                 Psicologo                  @relation(fields: [psicologoId], references: [id])
+  paquetePaciente           PaquetePaciente?           @relation(fields: [paquetePacienteId], references: [id])
   
-  fechaHoraInicio           DateTime           @map("fecha_hora_inicio") @db.Timestamptz
-  fechaHoraFin              DateTime           @map("fecha_hora_fin") @db.Timestamptz
-  estado                    EstadoCita         @default(PROGRAMADA)
-  motivoConsulta            String?            @map("motivo_consulta") @db.VarChar(255)
-  notaCancelacion           String?            @map("nota_cancelacion") @db.Text
+  tipoCita                  TipoCita                   @default(TERAPIA) @map("tipo_cita")
+  fechaHoraInicio           DateTime                   @map("fecha_hora_inicio") @db.Timestamptz
+  fechaHoraFin              DateTime                   @map("fecha_hora_fin") @db.Timestamptz
+  estado                    EstadoCita                 @default(PROGRAMADA)
+  motivoConsulta            String?                    @map("motivo_consulta") @db.VarChar(255)
+  notaCancelacion           String?                    @map("nota_cancelacion") @db.Text
 
   // Variables y Salidas del Módulo Machine Learning (No-Show Prediction)
-  probabilidadInasistencia  Decimal?           @map("probabilidad_inasistencia") @db.Decimal(5, 4) // Ej. 0.7420 (74.2%)
-  nivelRiesgoInasistencia   NivelRiesgo?       @map("nivel_riesgo_inasistencia")
+  probabilidadInasistencia  Decimal?                   @map("probabilidad_inasistencia") @db.Decimal(5, 4) // Ej. 0.7420 (74.2%)
+  nivelRiesgoInasistencia   NivelRiesgo?               @map("nivel_riesgo_inasistencia")
   
-  creadoEn                  DateTime           @default(now()) @map("creado_en") @db.Timestamptz
-  actualizadoEn             DateTime           @updatedAt @map("actualizado_en") @db.Timestamptz
+  creadoEn                  DateTime                   @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn             DateTime                   @updatedAt @map("actualizado_en") @db.Timestamptz
 
   evolucionClinica          EvolucionClinica?
+  evaluacionClinicaInicial  HistoriaClinicaEvaluacion?
+  movimientosSesion         MovimientoSesion[]
 
   @@index([psicologoId, fechaHoraInicio])
   @@index([pacienteId])
@@ -219,7 +310,86 @@ model Cita {
 }
 
 // -------------------------------------------------------------
-// MODELO DE HISTORIA / EVOLUCIÓN CLÍNICA (Sprint 4)
+// MODELO DE EVALUACIÓN INICIAL CLÍNICA (Primera Sesión - RN-01, RN-03)
+// -------------------------------------------------------------
+
+model HistoriaClinicaEvaluacion {
+  id                    String           @id @default(uuid())
+  pacienteId            String           @map("paciente_id")
+  psicologoId           String           @map("psicologo_id")
+  citaId                String?          @unique @map("cita_id")
+  paciente              Paciente         @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  psicologo             Psicologo        @relation(fields: [psicologoId], references: [id], onDelete: Cascade)
+  cita                  Cita?            @relation(fields: [citaId], references: [id], onDelete: SetNull)
+
+  fecha                 DateTime         @default(now()) @db.Timestamptz
+  motivoConsulta        String           @map("motivo_consulta") @db.Text
+  anamnesis             String           @db.Text
+  examenMental          String           @map("examen_mental") @db.Text
+  diagnosticoPresuntivo String           @map("diagnostico_presuntivo") @db.Text
+  codigoCIE10           String?          @map("codigo_cie10") @db.VarChar(20)
+  pruebasAplicadas      String?          @map("pruebas_aplicadas") @db.Text
+  conclusiones          String?          @db.Text
+  creadoEn              DateTime         @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn         DateTime         @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  planTratamiento       PlanTratamiento?
+
+  @@index([pacienteId])
+  @@index([psicologoId])
+  @@map("historias_clinicas_evaluacion")
+}
+
+// -------------------------------------------------------------
+// MODELO DE PLAN DE TRATAMIENTO (RN-04)
+// -------------------------------------------------------------
+
+model PlanTratamiento {
+  id                   String                     @id @default(uuid())
+  pacienteId           String                     @map("paciente_id")
+  psicologoId          String                     @map("psicologo_id")
+  evaluacionId         String?                    @unique @map("evaluacion_id")
+  paciente             Paciente                   @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  psicologo            Psicologo                  @relation(fields: [psicologoId], references: [id], onDelete: Cascade)
+  evaluacion           HistoriaClinicaEvaluacion? @relation(fields: [evaluacionId], references: [id], onDelete: SetNull)
+
+  objetivos            String                     @db.Text
+  enfoqueTerapeutico   String                     @map("enfoque_terapeutico") @db.VarChar(150)
+  frecuencia           String                     @db.VarChar(50) // Ej. "Semanal", "Quincenal"
+  numSesiones          Int                        @map("num_sesiones")
+  activo               Boolean                    @default(true)
+  creadoEn             DateTime                   @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn        DateTime                   @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  @@index([pacienteId])
+  @@index([psicologoId])
+  @@map("planes_tratamiento")
+}
+
+// -------------------------------------------------------------
+// MODELO DE CONSENTIMIENTO INFORMADO (RN-05)
+// -------------------------------------------------------------
+
+model ConsentimientoInformado {
+  id              String    @id @default(uuid())
+  pacienteId      String    @map("paciente_id")
+  paciente        Paciente  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  fechaFirma      DateTime  @default(now()) @map("fecha_firma") @db.Timestamptz
+  documentoUrl    String?   @map("documento_url") @db.VarChar(255)
+  firmado         Boolean   @default(true)
+  nombreFirmante  String    @map("nombre_firmante") @db.VarChar(150)
+  dniFirmante     String    @map("dni_firmante") @db.VarChar(15)
+  parentesco      String?   @db.VarChar(50) // "Titular", "Madre", "Padre", "Tutor Legal"
+  observaciones   String?   @db.Text
+  creadoEn        DateTime  @default(now()) @map("creado_en") @db.Timestamptz
+
+  @@index([pacienteId])
+  @@map("consentimientos_informados")
+}
+
+// -------------------------------------------------------------
+// MODELO DE HISTORIA / EVOLUCIÓN CLÍNICA (SOAP - Sprint 4, RN-16, RN-47)
 // -------------------------------------------------------------
 
 model EvolucionClinica {
@@ -233,10 +403,10 @@ model EvolucionClinica {
   
   fechaSesion                 DateTime     @default(now()) @map("fecha_sesion") @db.Timestamptz
   motivoConsulta              String       @map("motivo_consulta") @db.Text
-  tecnicasUtilizadas          String?      @map("tecnicas_utilizadas") @db.Text // Ej. Reestructuración cognitiva, respiración diafragmática
+  tecnicasUtilizadas          String?      @map("tecnicas_utilizadas") @db.Text
   observacionesConductuales   String?      @map("observaciones_conductuales") @db.Text
-  notaEvolucion               String       @map("nota_evolucion") @db.Text // Nota de desarrollo SOAP
-  tareasCasa                  String?      @map("tareas_casa") @db.Text // Ejercicios asignados para la siguiente sesión
+  notaEvolucion               String       @map("nota_evolucion") @db.Text // Nota SOAP
+  tareasCasa                  String?      @map("tareas_casa") @db.Text
 
   creadoEn                    DateTime     @default(now()) @map("creado_en") @db.Timestamptz
   actualizadoEn               DateTime     @updatedAt @map("actualizado_en") @db.Timestamptz
@@ -244,4 +414,49 @@ model EvolucionClinica {
   @@index([pacienteId])
   @@index([psicologoId])
   @@map("evoluciones_clinicas")
+}
+
+// -------------------------------------------------------------
+// MODELO DE INFORME DE ALTA CLÍNICA (RN-29)
+// -------------------------------------------------------------
+
+model InformeAlta {
+  id                 String      @id @default(uuid())
+  pacienteId         String      @map("paciente_id")
+  psicologoId        String      @map("psicologo_id")
+  paciente           Paciente    @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  psicologo          Psicologo   @relation(fields: [psicologoId], references: [id], onDelete: Cascade)
+
+  fechaAlta          DateTime    @default(now()) @map("fecha_alta") @db.Timestamptz
+  motivoAlta         MotivoAlta  @default(CUMPLIMIENTO_OBJETIVOS) @map("motivo_alta")
+  resumenTratamiento String      @map("resumen_tratamiento") @db.Text
+  logrosAlcanzados   String      @map("logros_alcanzados") @db.Text
+  recomendaciones    String      @db.Text
+  creadoEn           DateTime    @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn      DateTime    @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  @@index([pacienteId])
+  @@index([psicologoId])
+  @@map("informes_alta")
+}
+
+// -------------------------------------------------------------
+// MODELO DE LOGS DE AUDITORÍA (RN-26, RN-27, RN-49)
+// -------------------------------------------------------------
+
+model LogAuditoria {
+  id              String    @id @default(uuid())
+  usuarioId       String    @map("usuario_id")
+  usuario         Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  accion          String    @db.VarChar(100) // ej. "LEER_HISTORIA_CLINICA", "DESCARGAR_NOTAS"
+  entidadAfectada String    @map("entidad_afectada") @db.VarChar(80)
+  entidadId       String?   @map("entidad_id") @db.VarChar(100)
+  detalles        String?   @db.Text
+  ip              String?   @db.VarChar(45)
+  fecha           DateTime  @default(now()) @db.Timestamptz
+
+  @@index([usuarioId, entidadAfectada, entidadId])
+  @@index([fecha])
+  @@map("logs_auditoria")
 }
