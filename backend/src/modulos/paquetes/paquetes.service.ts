@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CrearPaqueteDto } from './dto/crear-paquete.dto';
 import { AsignarPaqueteDto } from './dto/asignar-paquete.dto';
-import { EstadoPaquete } from '@prisma/client';
+import { EstadoPaquete, TipoMovimientoSesion } from '@prisma/client';
 
 @Injectable()
 export class PaquetesService {
@@ -46,20 +46,33 @@ export class PaquetesService {
     const fechaExpiracion = new Date();
     fechaExpiracion.setDate(fechaCompra.getDate() + paquete.vigenciaDias);
 
-    return this.prisma.paquetePaciente.create({
-      data: {
-        pacienteId: dto.pacienteId,
-        paqueteId: dto.paqueteId,
-        sesionesTotales: paquete.cantidadSesiones,
-        sesionesConsumidas: 0,
-        sesionesRestantes: paquete.cantidadSesiones,
-        estado: EstadoPaquete.ACTIVO,
-        fechaCompra,
-        fechaExpiracion,
-      },
-      include: {
-        paquete: true,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const nuevoPaquete = await tx.paquetePaciente.create({
+        data: {
+          pacienteId: dto.pacienteId,
+          paqueteId: dto.paqueteId,
+          sesionesTotales: paquete.cantidadSesiones,
+          sesionesConsumidas: 0,
+          sesionesRestantes: paquete.cantidadSesiones,
+          estado: EstadoPaquete.ACTIVO,
+          fechaCompra,
+          fechaExpiracion,
+        },
+        include: {
+          paquete: true,
+        },
+      });
+
+      await tx.movimientoSesion.create({
+        data: {
+          paquetePacienteId: nuevoPaquete.id,
+          tipo: TipoMovimientoSesion.COMPRA,
+          cantidad: paquete.cantidadSesiones,
+          motivo: `Compra y asignación de ${paquete.nombre}`,
+        },
+      });
+
+      return nuevoPaquete;
     });
   }
 

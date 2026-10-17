@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CrearPsicologoDto } from './dto/crear-psicologo.dto';
 import { ActualizarPsicologoDto } from './dto/actualizar-psicologo.dto';
 import * as bcrypt from 'bcrypt';
-import { Rol } from '@prisma/client';
+import { DiaSemana, Rol } from '@prisma/client';
 
 @Injectable()
 export class PsicologosService {
@@ -36,7 +36,7 @@ export class PsicologosService {
         },
       });
 
-      return tx.psicologo.create({
+      const nuevoPsicologo = await tx.psicologo.create({
         data: {
           usuarioId: nuevoUsuario.id,
           dni: dto.dni,
@@ -49,10 +49,45 @@ export class PsicologosService {
           biografia: dto.biografia,
           fotoUrl: dto.fotoUrl,
         },
+      });
+
+      // Crear disponibilidad de horario (HU-02 / RN-35)
+      const dias = dto.diasAtencion && dto.diasAtencion.length > 0
+        ? dto.diasAtencion
+        : ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+
+      const horaInicioLV = dto.horaInicioLV || '09:00';
+      const horaFinLV = dto.horaFinLV || '18:00';
+      const horaInicioSab = dto.horaInicioSabado || '09:00';
+      const horaFinSab = dto.horaFinSabado || '13:00';
+
+      const disponibilidadesData = dias
+        .filter((d) => d in DiaSemana && d !== 'DOMINGO')
+        .map((diaStr) => {
+          const diaSemana = diaStr as DiaSemana;
+          const esSabado = diaSemana === DiaSemana.SABADO;
+          return {
+            psicologoId: nuevoPsicologo.id,
+            diaSemana,
+            horaInicio: esSabado ? horaInicioSab : horaInicioLV,
+            horaFin: esSabado ? horaFinSab : horaFinLV,
+            estaActivo: true,
+          };
+        });
+
+      if (disponibilidadesData.length > 0) {
+        await tx.disponibilidadPsicologo.createMany({
+          data: disponibilidadesData,
+        });
+      }
+
+      return tx.psicologo.findUnique({
+        where: { id: nuevoPsicologo.id },
         include: {
           usuario: {
             select: { id: true, correo: true, rol: true, estaActivo: true },
           },
+          disponibilidades: true,
         },
       });
     });

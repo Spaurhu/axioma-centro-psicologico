@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, Length, MinLength, IsNumber } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, Length, MinLength, IsNumber, IsArray } from 'class-validator';
 
 export class CrearPsicologoDto {
   @IsEmail({}, { message: 'El correo debe ser válido' })
@@ -46,4 +46,25 @@ export class CrearPsicologoDto {
   @IsOptional()
   @IsString()
   fotoUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  diasAtencion?: string[];
+
+  @IsOptional()
+  @IsString()
+  horaInicioLV?: string;
+
+  @IsOptional()
+  @IsString()
+  horaFinLV?: string;
+
+  @IsOptional()
+  @IsString()
+  horaInicioSabado?: string;
+
+  @IsOptional()
+  @IsString()
+  horaFinSabado?: string;
 }

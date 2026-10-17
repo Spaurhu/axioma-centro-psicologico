@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import {
   Users, UserCheck, Calendar, PackageCheck, Plus, LogOut,
-  BrainCircuit, RefreshCw, X, Search, CalendarClock
+  BrainCircuit, RefreshCw, X, Search, CalendarClock, Clock, Printer
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { LogoAxioma } from '@/components/logo-axioma';
@@ -68,7 +69,6 @@ export default function PanelStaff() {
 
   const [mostrarModalEvolucion, setMostrarModalEvolucion] = useState(false);
   const [citaSeleccionadaParaNota, setCitaSeleccionadaParaNota] = useState<any>(null);
-  const [guardandoNota, setGuardandoNota] = useState(false);
 
   const [mostrarModalPsicologo, setMostrarModalPsicologo] = useState(false);
   const [mostrarModalEditarPaciente, setMostrarModalEditarPaciente] = useState(false);
@@ -98,10 +98,15 @@ export default function PanelStaff() {
 
   const [formNota, setFormNota] = useState({
     motivoConsulta: '',
+    subjetivo: '',
+    afecto: 'Eutímico / Ansioso',
+    lenguaje: 'Fluido y coherente',
+    conductaObservada: 'Colaborador, contacto visual adecuado',
+    analisis: '',
+    cie10: 'F41.1',
     tecnicasUtilizadas: '',
-    observacionesConductuales: '',
-    notaEvolucion: '',
     tareasCasa: '',
+    proximaSesion: 'Semanal - Continuar plan terapéutico',
   });
 
   const [formPsicologo, setFormPsicologo] = useState({
@@ -115,6 +120,11 @@ export default function PanelStaff() {
     especialidad: 'Psicoterapia Cognitivo-Conductual',
     tarifaPorSesion: 80,
     biografia: '',
+    diasAtencion: ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'],
+    horaInicioLV: '09:00',
+    horaFinLV: '18:00',
+    horaInicioSabado: '09:00',
+    horaFinSabado: '13:00',
   });
 
   const [formEditarPaciente, setFormEditarPaciente] = useState({
@@ -149,6 +159,14 @@ export default function PanelStaff() {
     const u = JSON.parse(usuarioGuardado);
     if (u.rol === 'PACIENTE') {
       router.push('/paciente');
+      return;
+    }
+    if (u.rol === 'PSICOLOGO') {
+      router.push('/psicologo');
+      return;
+    }
+    if (u.rol === 'RECEPCIONISTA') {
+      router.push('/recepcion');
       return;
     }
     setUsuario(u);
@@ -205,16 +223,17 @@ export default function PanelStaff() {
     const ahora = new Date();
     const tiempoHastaInicio = new Date(c.fechaHoraInicio).getTime() - ahora.getTime();
     if (tiempoHastaInicio > 30 * 60 * 1000) {
-      alert('⚠️ No se puede marcar asistencia anticipada. La cita está programada para una fecha u hora futura.');
+      toast.warning('No se puede marcar asistencia anticipada. La cita está programada para una fecha u hora futura.');
       return;
     }
 
     if (!confirm('¿Desea marcar asistencia para esta sesión? Se descontará automáticamente 1 sesión del paquete del paciente.')) return;
     try {
       await apiFetch(`/citas/${c.id}/asistencia`, { method: 'PATCH' });
+      toast.success('Asistencia registrada y sesión consumida exitosamente.');
       cargarDatos();
     } catch (err: any) {
-      alert(err.message || 'Error al marcar asistencia');
+      toast.error(err.message || 'Error al marcar asistencia');
     }
   };
 
@@ -223,7 +242,7 @@ export default function PanelStaff() {
     const bloques = generarHorariosDisponibles(formCita.fecha);
     const bloque = bloques[parseInt(formCita.horarioIndex)] || bloques[0];
     if (!bloque) {
-      alert('La fecha seleccionada no tiene horarios hábiles disponibles (clínica cerrada).');
+      toast.warning('La fecha seleccionada no tiene horarios hábiles disponibles (clínica cerrada).');
       return;
     }
 
@@ -231,12 +250,12 @@ export default function PanelStaff() {
     const fechaHoraFin = `${formCita.fecha}T${bloque.fin}:00`;
 
     if (new Date(fechaHoraInicio) < new Date()) {
-      alert('No se puede agendar una cita en una fecha u hora que ya ha pasado.');
+      toast.warning('No se puede agendar una cita en una fecha u hora que ya ha pasado.');
       return;
     }
 
     if (esSlotOcupado(formCita.psicologoId, formCita.fecha, bloque.inicio)) {
-      alert('El horario seleccionado ya se encuentra ocupado por otra cita con el terapeuta.');
+      toast.warning('El horario seleccionado ya se encuentra ocupado por otra cita con el terapeuta.');
       return;
     }
 
@@ -251,7 +270,7 @@ export default function PanelStaff() {
           motivoConsulta: formCita.motivoConsulta || 'Consulta terapéutica',
         }),
       });
-      alert('✓ Cita agendada exitosamente.');
+      toast.success('Cita agendada exitosamente.');
       setMostrarModalCita(false);
       setFormCita({
         pacienteId: '',
@@ -262,7 +281,7 @@ export default function PanelStaff() {
       });
       cargarDatos();
     } catch (err: any) {
-      alert(err.message || 'Error al agendar cita');
+      toast.error(err.message || 'Error al agendar cita');
     }
   };
 
@@ -283,7 +302,7 @@ export default function PanelStaff() {
     const bloques = generarHorariosDisponibles(formReprogramar.fecha);
     const bloque = bloques[parseInt(formReprogramar.horarioIndex)] || bloques[0];
     if (!bloque) {
-      alert('La fecha seleccionada no tiene horarios disponibles en la clínica.');
+      toast.warning('La fecha seleccionada no tiene horarios disponibles en la clínica.');
       return;
     }
 
@@ -291,12 +310,12 @@ export default function PanelStaff() {
     const nuevaFechaHoraFin = `${formReprogramar.fecha}T${bloque.fin}:00`;
 
     if (new Date(nuevaFechaHoraInicio) < new Date()) {
-      alert('No se puede reprogramar la cita a una fecha u hora pasada.');
+      toast.warning('No se puede reprogramar la cita a una fecha u hora pasada.');
       return;
     }
 
     if (esSlotOcupado(citaSeleccionadaParaReprog.psicologoId, formReprogramar.fecha, bloque.inicio, citaSeleccionadaParaReprog.id)) {
-      alert('El horario seleccionado ya está reservado por otra cita.');
+      toast.warning('El horario seleccionado ya está reservado por otra cita.');
       return;
     }
 
@@ -309,65 +328,201 @@ export default function PanelStaff() {
           motivoReprogramacion: formReprogramar.motivoReprogramacion || 'Reprogramación solicitada',
         }),
       });
-      alert('✓ Cita reprogramada exitosamente.');
+      toast.success('Cita reprogramada exitosamente.');
       setMostrarModalReprogramar(false);
       cargarDatos();
     } catch (err: any) {
-      alert(err.message || 'Error al reprogramar la cita');
+      toast.error(err.message || 'Error al reprogramar la cita');
     }
   };
 
-  // --- NOTA CLÍNICA SOAP (PERSISTENTE UTF-8) ---
+  // --- NOTA CLÍNICA SOAP (AUDITORÍA & PERSISTENCIA UTF-8) ---
+  const parsearObservaciones = (obs: string) => {
+    let afecto = 'Eutímico / Ansioso';
+    let lenguaje = 'Fluido y coherente';
+    let conducta = 'Colaborador, contacto visual adecuado';
+
+    if (obs) {
+      const matchAfecto = obs.match(/Afecto:\s*([^|]+)/i);
+      const matchLenguaje = obs.match(/Lenguaje:\s*([^|]+)/i);
+      const matchConducta = obs.match(/Conducta:\s*(.+)/i);
+
+      if (matchAfecto) afecto = matchAfecto[1].trim();
+      if (matchLenguaje) lenguaje = matchLenguaje[1].trim();
+      if (matchConducta) conducta = matchConducta[1].trim();
+      else if (!matchAfecto && !matchLenguaje) conducta = obs.trim();
+    }
+    return { afecto, lenguaje, conducta };
+  };
+
+  const parsearNotaEvolucion = (nota: string) => {
+    let subjetivo = '';
+    let analisis = '';
+    let cie10 = 'F41.1 (Ansiedad generalizada)';
+    let proximaSesion = 'Semanal - Continuar plan terapéutico';
+
+    if (nota) {
+      const matchS = nota.match(/(?:^|\n)\s*S:\s*([\s\S]*?)(?=(?:\n\s*A:|\n\s*CIE-10:|\n\s*Plan:|$))/i);
+      const matchA = nota.match(/(?:^|\n)\s*A:\s*([\s\S]*?)(?=(?:\n\s*CIE-10:|\n\s*Plan:|$))/i);
+      const matchCie = nota.match(/(?:^|\n)\s*CIE-10:\s*([^\n]+)/i);
+      const matchPlan = nota.match(/(?:^|\n)\s*(?:Plan|Próxima Sesión):\s*([\s\S]*?)$/i);
+
+      if (matchS) subjetivo = matchS[1].trim();
+      else subjetivo = nota.trim();
+
+      if (matchA) analisis = matchA[1].trim();
+      if (matchCie) cie10 = matchCie[1].trim();
+      if (matchPlan) proximaSesion = matchPlan[1].trim();
+    }
+    return { subjetivo, analisis, cie10, proximaSesion };
+  };
+
   const abrirModalNota = async (cita: any) => {
     setCitaSeleccionadaParaNota(cita);
+    setFormNota({
+      motivoConsulta: cita.motivoConsulta || 'Consulta psicoterapéutica',
+      subjetivo: '',
+      afecto: 'Eutímico / Ansioso',
+      lenguaje: 'Fluido y coherente',
+      conductaObservada: 'Colaborador, contacto visual adecuado',
+      analisis: '',
+      cie10: 'F41.1',
+      tecnicasUtilizadas: 'Técnicas cognitivo-conductuales, reestructuración y respiración',
+      tareasCasa: '',
+      proximaSesion: 'Semanal - Continuar plan terapéutico',
+    });
+
     try {
       const evolucion = await apiFetch(`/citas/${cita.id}/evolucion`);
       if (evolucion) {
+        const { afecto, lenguaje, conducta } = parsearObservaciones(evolucion.observacionesConductuales || '');
+        const { subjetivo, analisis, cie10, proximaSesion } = parsearNotaEvolucion(evolucion.notaEvolucion || '');
+
         setFormNota({
-          motivoConsulta: evolucion.motivoConsulta || cita.motivoConsulta || '',
+          motivoConsulta: evolucion.motivoConsulta || cita.motivoConsulta || 'Consulta psicoterapéutica',
+          subjetivo: subjetivo || evolucion.notaEvolucion || '',
+          afecto,
+          lenguaje,
+          conductaObservada: conducta,
+          analisis: analisis || '',
+          cie10: cie10 || 'F41.1',
           tecnicasUtilizadas: evolucion.tecnicasUtilizadas || '',
-          observacionesConductuales: evolucion.observacionesConductuales || '',
-          notaEvolucion: evolucion.notaEvolucion || '',
           tareasCasa: evolucion.tareasCasa || '',
-        });
-      } else {
-        setFormNota({
-          motivoConsulta: cita.motivoConsulta || 'Sesión de seguimiento terapéutico',
-          tecnicasUtilizadas: 'Técnicas cognitivo-conductuales, reestructuración y respiración diafragmática',
-          observacionesConductuales: 'Paciente colaborativo, mantiene buen contacto visual.',
-          notaEvolucion: 'Paciente acude puntual a consulta. Manifiesta avances en la regulación de la ansiedad y reducción de pensamientos automáticos.',
-          tareasCasa: 'Completar registro diario de pensamientos automáticos y técnica 5-4-3-2-1.',
+          proximaSesion: proximaSesion || 'Semanal - Continuar plan terapéutico',
         });
       }
-    } catch {
-      setFormNota({
-        motivoConsulta: cita.motivoConsulta || 'Sesión de seguimiento terapéutico',
-        tecnicasUtilizadas: 'Técnicas cognitivo-conductuales, reestructuración y respiración diafragmática',
-        observacionesConductuales: 'Paciente receptivo y orientado.',
-        notaEvolucion: 'Paciente acude puntual. Manifiesta avances en la regulación de la ansiedad.',
-        tareasCasa: 'Completar registro diario de pensamientos automáticos.',
-      });
+    } catch (err: any) {
+      console.log('No se pudo cargar la nota previa:', err);
     }
     setMostrarModalEvolucion(true);
   };
 
-  const handleGuardarNota = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!citaSeleccionadaParaNota) return;
-    setGuardandoNota(true);
+  // --- ACCIÓN EXCLUSIVA ADMINISTRADOR: REVERTIR CITA ---
+  const handleRevertirCita = async (cita: any) => {
+    if (usuario?.rol !== 'ADMINISTRADOR') {
+      toast.error('Acción restringida exclusivamente para Administradores.');
+      return;
+    }
+    const nombrePaciente = cita.paciente ? `${cita.paciente.nombres} ${cita.paciente.apellidos}` : 'Paciente';
+    if (!confirm(`¿Deseas revertir administrativamente la cita de ${nombrePaciente}? Se reintegrará 1 sesión consumida al paquete y la cita volverá a estado PROGRAMADA.`)) return;
     try {
-      await apiFetch(`/citas/${citaSeleccionadaParaNota.id}/evolucion`, {
-        method: 'POST',
-        body: JSON.stringify(formNota),
-      });
-      alert('✓ Nota de Evolución Clínica guardada correctamente en la historia del paciente.');
-      setMostrarModalEvolucion(false);
+      await apiFetch(`/citas/${cita.id}/revertir`, { method: 'POST' });
+      toast.success('Cita revertida y sesión reintegrada exitosamente.');
       cargarDatos();
     } catch (err: any) {
-      alert(err.message || 'Error al guardar la nota clínica');
-    } finally {
-      setGuardandoNota(false);
+      toast.error(err.message || 'Error al revertir la cita');
     }
+  };
+
+  // Impresión formal de reporte clínico SOAP
+  const handleImprimirReporte = () => {
+    if (!citaSeleccionadaParaNota) return;
+    const pac = citaSeleccionadaParaNota.paciente;
+    const psi = citaSeleccionadaParaNota.psicologo;
+    const fecha = fechaCorta(citaSeleccionadaParaNota.fechaHoraInicio);
+    const hora = `${horaCorta(citaSeleccionadaParaNota.fechaHoraInicio)} - ${horaCorta(citaSeleccionadaParaNota.fechaHoraFin)}`;
+
+    const ventana = window.open('', '_blank', 'width=850,height=950');
+    if (!ventana) {
+      toast.error('Por favor permite ventanas emergentes para imprimir la nota clínica.');
+      return;
+    }
+
+    ventana.document.write(`
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <title>Nota SOAP - ${pac?.nombres} ${pac?.apellidos}</title>
+        <style>
+          @page { size: A4; margin: 18mm; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; line-height: 1.5; font-size: 13px; margin: 0; padding: 20px; }
+          .header { border-bottom: 2px solid #0f766e; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-start; }
+          .logo-title { font-size: 18px; font-weight: bold; color: #0f766e; margin: 0; }
+          .logo-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+          .doc-tag { background: #f0fdfa; border: 1px solid #ccfbf1; color: #0f766e; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+          .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 16px; font-size: 12px; }
+          .meta-label { font-weight: 600; color: #475569; }
+          .section { margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
+          .section-header { background: #f1f5f9; padding: 6px 12px; font-weight: 700; font-size: 12px; color: #0f766e; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 8px; }
+          .section-body { padding: 10px 12px; font-size: 12px; }
+          .soap-badge { background: #0f766e; color: white; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; }
+          .tag { display: inline-block; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; font-size: 11px; margin-right: 6px; }
+          .signature-area { margin-top: 40px; display: flex; justify-content: flex-end; }
+          .signature-box { width: 250px; text-align: center; border-top: 1px solid #334155; padding-top: 8px; font-size: 11px; }
+          .confidential { margin-top: 25px; font-size: 10px; color: #94a3b8; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 10px; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <h1 class="logo-title">AXIOMA — CENTRO PSICOLÓGICO</h1>
+            <p class="logo-sub">Historia Clínica Psicológica & Evolución Terapéutica Especializada</p>
+          </div>
+          <div class="doc-tag">Nota Clínica SOAP (Auditoría)</div>
+        </div>
+        <div class="meta-grid">
+          <div><span class="meta-label">Paciente:</span> ${pac?.nombres || ''} ${pac?.apellidos || ''} (DNI: ${pac?.dni || 'N/A'})</div>
+          <div><span class="meta-label">Terapeuta:</span> ${psi?.nombres || ''} ${psi?.apellidos || ''} (${psi?.numeroColegiatura || 'C.Ps.P.'})</div>
+          <div><span class="meta-label">Fecha de Sesión:</span> ${fecha} | ${hora}</div>
+          <div><span class="meta-label">Motivo Principal:</span> ${formNota.motivoConsulta || 'Consulta psicoterapéutica'}</div>
+        </div>
+        <div class="section">
+          <div class="section-header"><span class="soap-badge">S</span><span>SUBJETIVO — Relato del Paciente</span></div>
+          <div class="section-body">${formNota.subjetivo || 'Sin registro subjetivo específico.'}</div>
+        </div>
+        <div class="section">
+          <div class="section-header"><span class="soap-badge">O</span><span>OBJETIVO — Examen Mental & Conducta Observada</span></div>
+          <div class="section-body">
+            <p style="margin: 0 0 6px 0;"><span class="tag"><strong>Afecto:</strong> ${formNota.afecto || 'Modulado'}</span><span class="tag"><strong>Lenguaje:</strong> ${formNota.lenguaje || 'Fluido y coherente'}</span></p>
+            <p style="margin: 0;"><strong>Conducta Observada:</strong> ${formNota.conductaObservada || 'Colaborador y orientado.'}</p>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header"><span class="soap-badge">A</span><span>ANÁLISIS — Interpretación Clínica & Diagnóstico</span></div>
+          <div class="section-body">
+            <p style="margin: 0 0 6px 0;"><strong>Juicio Clínico:</strong> ${formNota.analisis || 'Evolución favorable.'}</p>
+            <p style="margin: 0 0 6px 0;"><strong>Código CIE-10:</strong> <span class="tag">${formNota.cie10 || 'No especificado'}</span></p>
+            <p style="margin: 0;"><strong>Técnicas:</strong> ${formNota.tecnicasUtilizadas || 'Técnicas cognitivo-conductuales.'}</p>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header"><span class="soap-badge">P</span><span>PLAN — Prescripción & Seguimiento Intersesión</span></div>
+          <div class="section-body">
+            <p style="margin: 0 0 6px 0;"><strong>Tareas para Casa:</strong> ${formNota.tareasCasa || 'Registro de pensamientos.'}</p>
+            <p style="margin: 0;"><strong>Próxima Sesión:</strong> ${formNota.proximaSesion || 'Semanal.'}</p>
+          </div>
+        </div>
+        <div class="signature-area">
+          <div class="signature-box"><strong>Ps. ${psi?.nombres || ''} ${psi?.apellidos || ''}</strong><br/>${psi?.numeroColegiatura || 'Colegio de Psicólogos del Perú'}<br/>Firma y Sello Profesional</div>
+        </div>
+        <div class="confidential">DOCUMENTO CONFIDENCIAL — Conforme a la Ley General de Salud N° 26842 y el Código de Ética Profesional del C.Ps.P.</div>
+        <script>window.onload = function() { setTimeout(function() { window.print(); }, 250); };</script>
+      </body>
+      </html>
+    `);
+    ventana.document.close();
   };
 
   // --- REGISTRO DE PSICÓLOGO (HU-02) ---
@@ -376,9 +531,12 @@ export default function PanelStaff() {
     try {
       await apiFetch('/psicologos', {
         method: 'POST',
-        body: JSON.stringify(formPsicologo),
+        body: JSON.stringify({
+          ...formPsicologo,
+          tarifaPorSesion: Number(formPsicologo.tarifaPorSesion),
+        }),
       });
-      alert('✓ Psicólogo registrado exitosamente en el sistema.');
+      toast.success('Psicólogo registrado exitosamente con su horario de disponibilidad.');
       setMostrarModalPsicologo(false);
       setFormPsicologo({
         dni: '',
@@ -391,10 +549,15 @@ export default function PanelStaff() {
         especialidad: 'Psicoterapia Cognitivo-Conductual',
         tarifaPorSesion: 80,
         biografia: '',
+        diasAtencion: ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'],
+        horaInicioLV: '09:00',
+        horaFinLV: '18:00',
+        horaInicioSabado: '09:00',
+        horaFinSabado: '13:00',
       });
       cargarDatos();
     } catch (err: any) {
-      alert(err.message || 'Error al registrar psicólogo');
+      toast.error(err.message || 'Error al registrar psicólogo');
     }
   };
 
@@ -420,11 +583,11 @@ export default function PanelStaff() {
         method: 'PUT',
         body: JSON.stringify(formEditarPaciente),
       });
-      alert('✓ Datos del paciente actualizados correctamente.');
+      toast.success('Datos del paciente actualizados correctamente.');
       setMostrarModalEditarPaciente(false);
       cargarDatos();
     } catch (err: any) {
-      alert(err.message || 'Error al actualizar paciente');
+      toast.error(err.message || 'Error al actualizar paciente');
     }
   };
 
@@ -453,11 +616,11 @@ export default function PanelStaff() {
           metodoPago: formAsignarPaquete.metodoPago,
         }),
       });
-      alert('✓ Paquete terapéutico asignado exitosamente al paciente.');
+      toast.success('Paquete terapéutico asignado exitosamente al paciente.');
       setMostrarModalAsignarPaquete(false);
       cargarDatos();
     } catch (err: any) {
-      alert(err.message || 'Error al asignar paquete');
+      toast.error(err.message || 'Error al asignar paquete');
     }
   };
 
@@ -474,7 +637,7 @@ export default function PanelStaff() {
           vigenciaDias: Number(formCrearPaquete.vigenciaDias),
         }),
       });
-      alert('✓ Nuevo paquete registrado en el catálogo.');
+      toast.success('Nuevo paquete registrado en el catálogo.');
       setMostrarModalCrearPaquete(false);
       setFormCrearPaquete({
         nombre: '',
@@ -485,7 +648,7 @@ export default function PanelStaff() {
       });
       cargarDatos();
     } catch (err: any) {
-      alert(err.message || 'Error al crear paquete');
+      toast.error(err.message || 'Error al crear paquete');
     }
   };
 
@@ -800,6 +963,15 @@ export default function PanelStaff() {
                                     </button>
                                   </>
                                 )}
+                                {usuario?.rol === 'ADMINISTRADOR' && (c.estado === 'ATENDIDA' || c.estado === 'NO_ASISTIO' || c.estado === 'CANCELADA') && (
+                                  <button
+                                    onClick={() => handleRevertirCita(c)}
+                                    title="Revertir cita y restituir 1 sesión al paquete del paciente"
+                                    className="rounded-button border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
+                                  >
+                                    Revertir
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => abrirModalNota(c)}
                                   className={`${btnSecondary} whitespace-nowrap px-3 py-1.5 text-xs`}
@@ -839,6 +1011,14 @@ export default function PanelStaff() {
                   <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-axiomaText-soft">
                     {p.biografia || 'Especialista en intervención clínica y salud mental preventiva.'}
                   </p>
+                  <div className="mt-3 flex items-center gap-1.5 rounded bg-axioma-50 px-2.5 py-1 text-xs text-axioma-800">
+                    <Clock className="h-3.5 w-3.5 shrink-0 text-axioma-600" />
+                    <span>
+                      {p.disponibilidades && p.disponibilidades.length > 0
+                        ? `Atención: ${p.disponibilidades.length} días activos (Lun-Vie ${p.disponibilidades[0]?.horaInicio || '09:00'} a ${p.disponibilidades[0]?.horaFin || '18:00'})`
+                        : 'Horario: Lun-Vie 09:00 - 18:00 | Sáb 09:00 - 13:00'}
+                    </span>
+                  </div>
                   <div className="mt-5 flex items-center justify-between border-t border-axioma-100 pt-4 text-sm">
                     <span className="tabular-nums text-axiomaText-soft">DNI: {p.dni}</span>
                     <span className="font-semibold text-axioma-700">S/. {p.tarifaPorSesion || 80} / sesión</span>
@@ -1154,101 +1334,217 @@ export default function PanelStaff() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 3: NOTA DE EVOLUCIÓN CLÍNICA SOAP (PERSISTENTE UTF-8) */}
+      {/* MODAL 3: NOTA DE EVOLUCIÓN CLÍNICA SOAP (MODO AUDITORÍA / SOLO LECTURA) */}
       {/* ========================================================================= */}
       {mostrarModalEvolucion && (
         <div className={modalOverlay}>
           <div className={modalWrap}>
-            <div className={`${modalCard} max-w-xl`} role="dialog" aria-modal="true">
-              <div className="flex items-start justify-between gap-4 border-b border-axioma-100 pb-4">
+            <div className={`${modalCard} max-w-3xl max-h-[92vh] overflow-y-auto`} role="dialog" aria-modal="true">
+              {/* BANNER AUDITORÍA */}
+              <div className="mb-4 flex items-center gap-2 rounded-card-sm border border-amber-300 bg-amber-50 p-3 text-xs font-medium text-amber-900">
+                <span className="text-base">🔒</span>
                 <div>
-                  <h3 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink">
-                    Nota de evolución clínica (SOAP)
-                  </h3>
-                  <p className="mt-0.5 text-sm text-axiomaText-soft">
-                    Paciente:{' '}
-                    <span className="font-semibold text-axiomaText-ink">
-                      {citaSeleccionadaParaNota?.paciente?.nombres} {citaSeleccionadaParaNota?.paciente?.apellidos}
+                  <strong>Modo Auditoría: Solo lectura.</strong> Las notas clínicas no pueden ser modificadas por el administrador.
+                </div>
+              </div>
+
+              <div className="flex items-start justify-between border-b border-axioma-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-teal-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-teal-800">
+                      Registro SOAP
                     </span>
+                    <h3 className="font-display text-xl font-medium tracking-heading text-axiomaText-ink">
+                      Evolución Psicoterapéutica
+                    </h3>
+                  </div>
+                  <p className="mt-1 text-xs text-axiomaText-soft">
+                    Paciente: <strong className="text-axiomaText-ink">{citaSeleccionadaParaNota?.paciente?.nombres} {citaSeleccionadaParaNota?.paciente?.apellidos}</strong> • DNI: {citaSeleccionadaParaNota?.paciente?.dni || 'N/A'} • Sesión: {fechaCorta(citaSeleccionadaParaNota?.fechaHoraInicio)} ({horaCorta(citaSeleccionadaParaNota?.fechaHoraInicio)})
                   </p>
                 </div>
                 <button
-                  onClick={() => setMostrarModalEvolucion(false)}
-                  aria-label="Cerrar"
-                  className="rounded-full p-1.5 text-axiomaText-soft transition hover:bg-axioma-100 hover:text-axiomaText-ink"
+                  type="button"
+                  onClick={handleImprimirReporte}
+                  className="inline-flex items-center gap-1.5 rounded-button border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800 transition-colors hover:bg-teal-100"
+                  title="Imprimir o exportar ficha clínica a formato físico A4"
                 >
-                  <X className="h-5 w-5" />
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>Imprimir Ficha</span>
                 </button>
               </div>
 
-              <form onSubmit={handleGuardarNota} className="mt-5 space-y-4">
+              <div className="mt-4 space-y-4 text-left text-sm">
                 <div>
-                  <label htmlFor="notaMotivo" className={label}>Motivo abordado</label>
+                  <label className={label}>Motivo de consulta / Foco de sesión</label>
                   <input
-                    id="notaMotivo"
                     type="text"
-                    required
+                    readOnly
                     value={formNota.motivoConsulta}
-                    onChange={(e) => setFormNota({ ...formNota, motivoConsulta: e.target.value })}
-                    className={input}
+                    className={`${input} bg-slate-50 cursor-not-allowed text-axiomaText-ink`}
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="notaTecnicas" className={label}>Técnicas psicológicas aplicadas</label>
-                  <input
-                    id="notaTecnicas"
-                    type="text"
-                    required
-                    value={formNota.tecnicasUtilizadas}
-                    onChange={(e) => setFormNota({ ...formNota, tecnicasUtilizadas: e.target.value })}
-                    className={input}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="notaConductual" className={label}>Observaciones conductuales</label>
-                  <input
-                    id="notaConductual"
-                    type="text"
-                    value={formNota.observacionesConductuales}
-                    onChange={(e) => setFormNota({ ...formNota, observacionesConductuales: e.target.value })}
-                    className={input}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="notaEvolucion" className={label}>Nota de evolución (desarrollo SOAP)</label>
+                {/* SECCIÓN S: SUBJETIVO */}
+                <div className="rounded-card border border-teal-200 bg-teal-50/40 p-3.5">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-700 text-xs font-bold text-white">
+                      S
+                    </span>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-teal-900">
+                      Subjetivo — Relato y Vivencia del Consultante
+                    </h4>
+                  </div>
+                  <p className="mb-2 text-[11px] text-teal-800/80">
+                    Discurso verbal del paciente, motivo manifiesto, quejas principales y nivel autoreportado de malestar.
+                  </p>
                   <textarea
-                    id="notaEvolucion"
-                    rows={4}
-                    required
-                    value={formNota.notaEvolucion}
-                    onChange={(e) => setFormNota({ ...formNota, notaEvolucion: e.target.value })}
-                    className={`${input} resize-y`}
+                    rows={3}
+                    readOnly
+                    value={formNota.subjetivo || 'Sin registro subjetivo específico.'}
+                    className={`${input} bg-slate-50 cursor-not-allowed resize-none text-axiomaText-ink`}
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="notaTareas" className={label}>Tareas y recomendaciones inter-sesión</label>
-                  <input
-                    id="notaTareas"
-                    type="text"
-                    value={formNota.tareasCasa}
-                    onChange={(e) => setFormNota({ ...formNota, tareasCasa: e.target.value })}
-                    className={input}
-                  />
+                {/* SECCIÓN O: OBJETIVO */}
+                <div className="rounded-card border border-slate-200 bg-slate-50/70 p-3.5">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-700 text-xs font-bold text-white">
+                      O
+                    </span>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                      Objetivo — Examen Mental & Conducta Observada
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-700">Afecto</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formNota.afecto}
+                        className={`${input} bg-white cursor-not-allowed text-axiomaText-ink`}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-700">Lenguaje / Discurso</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formNota.lenguaje}
+                        className={`${input} bg-white cursor-not-allowed text-axiomaText-ink`}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-700">Conducta y Actitud</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formNota.conductaObservada}
+                        className={`${input} bg-white cursor-not-allowed text-axiomaText-ink`}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalEvolucion(false)} className={`${btnSecondary} ${tamMd}`}>
-                    Cerrar
-                  </button>
-                  <button type="submit" disabled={guardandoNota} className={`${btnPrimary} ${tamMd}`}>
-                    {guardandoNota ? 'Guardando...' : 'Guardar en historia clínica'}
-                  </button>
+                {/* SECCIÓN A: ANÁLISIS */}
+                <div className="rounded-card border border-amber-200 bg-amber-50/30 p-3.5">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-700 text-xs font-bold text-white">
+                      A
+                    </span>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                      Análisis — Interpretación Psicológica & Técnicas
+                    </h4>
+                  </div>
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-amber-900">
+                        Interpretación clínica & respuesta a la intervención
+                      </label>
+                      <textarea
+                        rows={2}
+                        readOnly
+                        value={formNota.analisis || 'Sin análisis clínico registrado.'}
+                        className={`${input} bg-white cursor-not-allowed resize-none text-axiomaText-ink`}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-amber-900">Código CIE-10 / Diagnóstico</label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={formNota.cie10}
+                          className={`${input} bg-white cursor-not-allowed text-axiomaText-ink`}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-amber-900">Técnicas psicoterapéuticas</label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={formNota.tecnicasUtilizadas}
+                          className={`${input} bg-white cursor-not-allowed text-axiomaText-ink`}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </form>
+
+                {/* SECCIÓN P: PLAN */}
+                <div className="rounded-card border border-emerald-200 bg-emerald-50/30 p-3.5">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-700 text-xs font-bold text-white">
+                      P
+                    </span>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-900">
+                      Plan — Tareas para Casa & Frecuencia
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-emerald-900">Tareas asignadas para casa</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formNota.tareasCasa || 'Sin tareas asignadas'}
+                        className={`${input} bg-white cursor-not-allowed text-axiomaText-ink`}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-emerald-900">Frecuencia / Próxima sesión</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formNota.proximaSesion}
+                        className={`${input} bg-white cursor-not-allowed text-axiomaText-ink`}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* FOOTER */}
+                <div className="flex flex-col gap-2.5 border-t border-axioma-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={handleImprimirReporte}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-button border border-axioma-300 bg-white px-3 py-2 text-xs font-semibold text-axiomaText-ink transition-colors hover:bg-axioma-50"
+                  >
+                    <Printer className="h-4 w-4 text-axioma-700" />
+                    <span>Imprimir Ficha SOAP (A4)</span>
+                  </button>
+
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setMostrarModalEvolucion(false)}
+                      className={`${btnSecondary} ${tamMd}`}
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1359,6 +1655,60 @@ export default function PanelStaff() {
                       className={input}
                     />
                   </div>
+                </div>
+
+                {/* Sección Disponibilidad Horaria de Atención */}
+                <div className="rounded-card-sm border border-axioma-200 bg-axioma-50 p-4">
+                  <h4 className="text-sm font-semibold text-axiomaText-ink">Disponibilidad Horaria de Atención</h4>
+                  <p className="mt-0.5 text-xs text-axiomaText-soft">Configura el rango de turnos que el psicólogo atenderá en el centro.</p>
+                  
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs font-medium text-axiomaText-ink">Lunes a Viernes</label>
+                      <div className="mt-1 flex items-center gap-1.5 text-xs">
+                        <input
+                          type="text"
+                          value={formPsicologo.horaInicioLV}
+                          onChange={(e) => setFormPsicologo({ ...formPsicologo, horaInicioLV: e.target.value })}
+                          className="w-16 rounded border border-axioma-200 bg-white px-2 py-1 text-center font-medium"
+                          placeholder="09:00"
+                        />
+                        <span className="text-axiomaText-soft">a</span>
+                        <input
+                          type="text"
+                          value={formPsicologo.horaFinLV}
+                          onChange={(e) => setFormPsicologo({ ...formPsicologo, horaFinLV: e.target.value })}
+                          className="w-16 rounded border border-axioma-200 bg-white px-2 py-1 text-center font-medium"
+                          placeholder="18:00"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-axiomaText-ink">Sábados</label>
+                      <div className="mt-1 flex items-center gap-1.5 text-xs">
+                        <input
+                          type="text"
+                          value={formPsicologo.horaInicioSabado}
+                          onChange={(e) => setFormPsicologo({ ...formPsicologo, horaInicioSabado: e.target.value })}
+                          className="w-16 rounded border border-axioma-200 bg-white px-2 py-1 text-center font-medium"
+                          placeholder="09:00"
+                        />
+                        <span className="text-axiomaText-soft">a</span>
+                        <input
+                          type="text"
+                          value={formPsicologo.horaFinSabado}
+                          onChange={(e) => setFormPsicologo({ ...formPsicologo, horaFinSabado: e.target.value })}
+                          className="w-16 rounded border border-axioma-200 bg-white px-2 py-1 text-center font-medium"
+                          placeholder="13:00"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="mt-2.5 text-[11px] text-axioma-700">
+                    ✓ Receso de refrigerio (13:00 - 14:00 L-V) y domingos cerrados protegidos automáticamente por las reglas del centro.
+                  </p>
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">

@@ -21,7 +21,10 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
 
   if (!response.ok) {
     const errorMsg = data?.message || 'Error en la petición al servidor';
-    throw new Error(Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg);
+    const err: any = new Error(Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg);
+    err.status = response.status;
+    err.data = data;
+    throw err;
   }
 
   return data;

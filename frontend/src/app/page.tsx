@@ -370,6 +370,24 @@ export default function PaginaPrincipal() {
                             <span>Agendar Cita en Vivo</span>
                           </Link>
                         </>
+                      ) : usuario.rol === 'PSICOLOGO' ? (
+                        <Link
+                          href="/psicologo"
+                          onClick={() => setMenuAbierto(false)}
+                          className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
+                        >
+                          <Award className="h-4 w-4 text-axioma-500" />
+                          <span>Portal Clínico & Notas SOAP</span>
+                        </Link>
+                      ) : usuario.rol === 'RECEPCIONISTA' ? (
+                        <Link
+                          href="/recepcion"
+                          onClick={() => setMenuAbierto(false)}
+                          className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
+                        >
+                          <Calendar className="h-4 w-4 text-axioma-500" />
+                          <span>Módulo de Recepción & Citas</span>
+                        </Link>
                       ) : (
                         <Link
                           href="/panel"
@@ -377,7 +395,7 @@ export default function PaginaPrincipal() {
                           className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
                         >
                           <LayoutDashboard className="h-4 w-4 text-axioma-500" />
-                          <span>Panel de Control Clínico</span>
+                          <span>Panel de Dirección Central</span>
                         </Link>
                       )}
                     </div>

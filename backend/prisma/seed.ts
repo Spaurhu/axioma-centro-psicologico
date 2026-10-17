@@ -1,4 +1,4 @@
-import { PrismaClient, Rol, DiaSemana, EstadoPaquete, TipoMovimientoSesion } from '@prisma/client';
+import { PrismaClient, Rol, DiaSemana, EstadoPaquete, TipoMovimientoSesion, EstadoCita, TipoCita, NivelRiesgo } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -148,17 +148,27 @@ async function main() {
           pacienteId: paciente.id,
           paqueteId: paqueteEsencial.id,
           sesionesTotales: 4,
-          sesionesConsumidas: 0,
-          sesionesRestantes: 4,
+          sesionesConsumidas: 2,
+          sesionesRestantes: 2,
           estado: EstadoPaquete.ACTIVO,
-          fechaCompra: new Date(),
-          fechaExpiracion: new Date(Date.now() + 90 * 24 * 3600 * 1000), // 90 días de vigencia
+          fechaCompra: new Date(Date.now() - 14 * 24 * 3600 * 1000), // Comprado hace 14 días
+          fechaExpiracion: new Date(Date.now() + 76 * 24 * 3600 * 1000), // 90 días de vigencia
         },
       });
       paquetePacienteId = nuevoPaquete.id;
-      console.log('✓ Paquete de 4 sesiones asignado a cliente@axioma.pe');
+      console.log('✓ Paquete de 4 sesiones asignado a cliente@axioma.pe (2 consumidas, 2 restantes)');
     } else {
+      await prisma.paquetePaciente.update({
+        where: { id: paqueteExistente.id },
+        data: {
+          sesionesTotales: 4,
+          sesionesConsumidas: 2,
+          sesionesRestantes: 2,
+          estado: EstadoPaquete.ACTIVO,
+        },
+      });
       paquetePacienteId = paqueteExistente.id;
+      console.log('✓ Paquete actualizado a 2 consumidas y 2 restantes para cliente@axioma.pe');
     }
 
     // Registrar MovimientoSesion de tipo COMPRA si no existe
@@ -177,12 +187,98 @@ async function main() {
             tipo: TipoMovimientoSesion.COMPRA,
             cantidad: 4,
             motivo: 'Compra de paquete de 4 sesiones (seed)',
+            fecha: new Date(Date.now() - 14 * 24 * 3600 * 1000),
           },
         });
         console.log('✓ Movimiento COMPRA (+4) registrado para el paquete de cliente@axioma.pe');
       }
+
+      // =========================================================================
+      // CITAS PASADAS ATENDIDAS Y MOVIMIENTOS DE CONSUMO (Demostración de Kardex)
+      // =========================================================================
+      let citasAtendidas = await prisma.cita.findMany({
+        where: { pacienteId: paciente.id, estado: EstadoCita.ATENDIDA },
+        orderBy: { fechaHoraInicio: 'desc' },
+      });
+
+      // Si faltan citas pasadas atendidas, creamos hasta tener al menos 2
+      if (citasAtendidas.length < 2) {
+        const haceSieteDias = new Date();
+        haceSieteDias.setDate(haceSieteDias.getDate() - 7);
+        haceSieteDias.setHours(10, 0, 0, 0);
+        const haceSieteDiasFin = new Date(haceSieteDias);
+        haceSieteDiasFin.setMinutes(50);
+
+        const nueva = await prisma.cita.create({
+          data: {
+            pacienteId: paciente.id,
+            psicologoId: psicologo.id,
+            paquetePacienteId,
+            tipoCita: TipoCita.TERAPIA,
+            fechaHoraInicio: haceSieteDias,
+            fechaHoraFin: haceSieteDiasFin,
+            estado: EstadoCita.ATENDIDA,
+            motivoConsulta: 'Sesión de psicoterapia - Ansiedad y manejo del estrés',
+            probabilidadInasistencia: 0.10,
+            nivelRiesgoInasistencia: NivelRiesgo.BAJO,
+          },
+        });
+        citasAtendidas.push(nueva);
+      }
+
+      // Tomamos las 2 citas atendidas más recientes y garantizamos sus movimientos de CONSUMO y notas SOAP
+      const citasDemostracion = citasAtendidas.slice(0, 2);
+      for (let i = 0; i < citasDemostracion.length; i++) {
+        const c = citasDemostracion[i];
+
+        // 1. Movimiento de CONSUMO
+        const movExistente = await prisma.movimientoSesion.findFirst({
+          where: { citaId: c.id, tipo: TipoMovimientoSesion.CONSUMO },
+        });
+
+        if (!movExistente) {
+          await prisma.movimientoSesion.create({
+            data: {
+              paquetePacienteId,
+              citaId: c.id,
+              tipo: TipoMovimientoSesion.CONSUMO,
+              cantidad: -1,
+              motivo: `Asistencia a sesión terapéutica #${i + 1} (seed)`,
+              fecha: c.fechaHoraInicio,
+            },
+          });
+        }
+
+        // 2. Nota de Evolución Clínica SOAP
+        const evolExistente = await prisma.evolucionClinica.findUnique({
+          where: { citaId: c.id },
+        });
+
+        if (!evolExistente) {
+          await prisma.evolucionClinica.create({
+            data: {
+              citaId: c.id,
+              pacienteId: paciente.id,
+              psicologoId: psicologo.id,
+              fechaSesion: c.fechaHoraInicio,
+              motivoConsulta: i === 0 ? 'Evaluación y encuadre psicoterapéutico' : 'Reestructuración cognitiva y respiración diafragmática',
+              tecnicasUtilizadas: i === 0 ? 'Psicoeducación, formulación de caso y registro ABC' : 'Reestructuración cognitiva y respiración diafragmática guiada',
+              observacionesConductuales: i === 0 ? 'Paciente orientado, colaborador y con buena disposición al diálogo.' : 'Paciente puntual, con menor tensión muscular observable.',
+              notaEvolucion: i === 0
+                ? 'S: Refiere haber experimentado episodios de angustia laboral. O: Lúcido, orientado en espacio y tiempo. A: Trastorno adaptativo con síntomas ansiosos leves. P: Se acuerda iniciar técnica de registro ABC.'
+                : 'S: Reporta mejoría en la conciliación del sueño tras aplicar la respiración guiada. O: Afecto modulado, discurso coherente. A: Avance favorable en la reducción de síntomas ansiosos somáticos. P: Profundizar en cuestionamiento socrático.',
+              tareasCasa: i === 0
+                ? 'Completar autoregistro de pensamientos disfuncionales en situaciones de estrés laboral.'
+                : 'Practicar 10 minutos diarios de respiración diafragmática antes de dormir.',
+            },
+          });
+        }
+      }
+
+      console.log('✓ 2 Citas atendidas configuradas con movimientos de CONSUMO (-1 cada una) y notas clínicas SOAP');
     }
   }
+
 
   // 1.4 Usuario Recepcionista (NUEVO)
   const recepcionista = await prisma.usuario.upsert({

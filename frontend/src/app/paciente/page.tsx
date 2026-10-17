@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, PackageCheck, LogOut, Plus, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
+import { Calendar, PackageCheck, LogOut, Plus, CheckCircle2, ArrowLeft, AlertCircle } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { LogoAxioma } from '@/components/logo-axioma';
 import {
@@ -31,6 +32,9 @@ const generarHorariosDisponibles = (fechaStr: string) => {
   const horaFin = dia === 6 ? 13 : 18; // Sábados hasta 1pm, Lun-Vie hasta 6pm
 
   for (let h = horaInicio; h < horaFin; h++) {
+    // Omitir receso de refrigerio L-V (13:00 a 14:00)
+    if (dia !== 6 && h === 13) continue;
+
     const hStr = h.toString().padStart(2, '0');
     horarios.push({
       inicio: `${hStr}:00`,
@@ -48,6 +52,7 @@ export default function PortalPaciente() {
   const [psicologos, setPsicologos] = useState<any[]>([]);
   const [citasExistentes, setCitasExistentes] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [errorAcceso, setErrorAcceso] = useState<string | null>(null);
   const [mostrarModalCita, setMostrarModalCita] = useState(false);
 
   const hoyStr = new Date().toISOString().split('T')[0];
@@ -66,26 +71,52 @@ export default function PortalPaciente() {
       return;
     }
     const u = JSON.parse(usuarioGuardado);
+    if (u.rol === 'ADMINISTRADOR') {
+      router.push('/panel');
+      return;
+    }
+    if (u.rol === 'PSICOLOGO') {
+      router.push('/psicologo');
+      return;
+    }
+    if (u.rol === 'RECEPCIONISTA') {
+      router.push('/recepcion');
+      return;
+    }
     setUsuario(u);
     cargarDatosPaciente(u);
   }, []);
 
   const cargarDatosPaciente = async (u: any) => {
     setCargando(true);
+    setErrorAcceso(null);
     try {
-      const [dataPsicos, dataCitas] = await Promise.all([
+      const promesas: Promise<any>[] = [
         apiFetch('/psicologos/publico'),
         apiFetch('/citas'),
-      ]);
+      ];
+
+      if (u.perfil?.id) {
+        promesas.push(apiFetch(`/paquetes/paciente/${u.perfil.id}`).catch(() => []));
+      }
+
+      const [dataPsicos, dataCitas, dataPaquetes] = await Promise.all(promesas);
       setPsicologos(dataPsicos || []);
       setCitasExistentes(dataCitas || []);
 
-      if (u.perfil?.id) {
-        const info = await apiFetch(`/pacientes/${u.perfil.id}`);
-        setPacienteInfo(info);
+      setPacienteInfo({
+        ...(u.perfil || {}),
+        correo: u.correo,
+        paquetesPaciente: dataPaquetes || [],
+        citas: dataCitas || [],
+      });
+    } catch (err: any) {
+      console.error('Error cargando portal paciente:', err);
+      if (err.status === 403 || err.message?.includes('denegado')) {
+        setErrorAcceso('Algunos datos clínicos requieren permisos específicos. Mostrando la información disponible.');
+      } else {
+        setErrorAcceso('No se pudieron sincronizar todos los datos.');
       }
-    } catch (err) {
-      console.error(err);
     } finally {
       setCargando(false);
     }
@@ -116,7 +147,7 @@ export default function PortalPaciente() {
     const bloques = generarHorariosDisponibles(formCita.fecha);
     const bloque = bloques[parseInt(formCita.horarioIndex)] || bloques[0];
     if (!bloque) {
-      alert('La fecha seleccionada no tiene horarios de atención en la clínica (domingos descanso).');
+      toast.warning('La fecha seleccionada no tiene horarios de atención en la clínica (domingos descanso).');
       return;
     }
 
@@ -124,12 +155,12 @@ export default function PortalPaciente() {
     const fechaHoraFin = `${formCita.fecha}T${bloque.fin}:00`;
 
     if (new Date(fechaHoraInicio) < new Date()) {
-      alert('No se puede agendar una cita en una fecha u hora pasada.');
+      toast.warning('No se puede agendar una cita en una fecha u hora pasada.');
       return;
     }
 
     if (esSlotOcupado(formCita.psicologoId, formCita.fecha, bloque.inicio)) {
-      alert('El horario seleccionado ya se encuentra ocupado con ese psicólogo.');
+      toast.warning('El horario seleccionado ya se encuentra ocupado con ese psicólogo.');
       return;
     }
 
@@ -142,14 +173,15 @@ export default function PortalPaciente() {
           fechaHoraInicio,
           fechaHoraFin,
           motivoConsulta: formCita.motivoConsulta || 'Consulta terapéutica',
+          tipoCita: 'TERAPIA',
         }),
       });
-      alert('✓ ¡Cita agendada con éxito en el sistema!');
+      toast.success('¡Cita agendada con éxito en el sistema!');
       setMostrarModalCita(false);
       setFormCita({ psicologoId: '', fecha: hoyStr, horarioIndex: '0', motivoConsulta: '' });
       cargarDatosPaciente(usuario);
     } catch (err: any) {
-      alert(err.message || 'Error al agendar cita');
+      toast.error(err.message || 'Error al agendar cita');
     }
   };
 
@@ -186,6 +218,12 @@ export default function PortalPaciente() {
       </header>
 
       <main className={`${contenedor} animate-fade-in space-y-10 py-8 motion-reduce:animate-none lg:py-10`}>
+        {errorAcceso && (
+          <div className="flex items-center gap-3 rounded-card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            <AlertCircle className="h-5 w-5 shrink-0 text-amber-600" />
+            <span>{errorAcceso}</span>
+          </div>
+        )}
 
         {/* Bienvenida y acción principal */}
         <section className="rounded-card bg-axioma-900 p-6 text-white shadow-panel sm:p-8">

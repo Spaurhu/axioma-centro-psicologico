@@ -3,14 +3,15 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Lock, Mail, AlertCircle, Shield, UserCheck, User, Sparkles } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Shield, UserCheck, User, Sparkles, Award } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { AuthShell } from '@/components/auth-shell';
 import { btnPrimary, tamLg, card, label, inputIcono, foco } from '@/lib/ui';
 
 const accesosDemo = [
   { rol: 'Admin', detalle: 'Total', Icono: Shield, correo: 'admin@axioma.pe', clave: 'admin123', fondo: 'bg-heather hover:bg-axioma-200/70' },
-  { rol: 'Psicólogo', detalle: 'Clínico', Icono: UserCheck, correo: 'psicologo@axioma.pe', clave: 'psico123', fondo: 'bg-axioma-100 hover:bg-axioma-200/70' },
+  { rol: 'Recepción', detalle: 'Operativo', Icono: UserCheck, correo: 'recepcion@axioma.pe', clave: 'recepcion123', fondo: 'bg-axioma-200/70 hover:bg-axioma-200' },
+  { rol: 'Psicólogo', detalle: 'Clínico', Icono: Award, correo: 'psicologo@axioma.pe', clave: 'psico123', fondo: 'bg-axioma-100 hover:bg-axioma-200/70' },
   { rol: 'Paciente', detalle: 'Portal', Icono: User, correo: 'cliente@axioma.pe', clave: 'cliente123', fondo: 'bg-axioma-50 hover:bg-axioma-100' },
 ];
 
@@ -36,13 +37,21 @@ export default function PaginaLogin() {
       localStorage.setItem('axioma_token', data.token);
       localStorage.setItem('axioma_usuario', JSON.stringify(data.usuario));
 
-      // Flujo de navegación profesional:
-      // - Si es Paciente: redirige a la página principal (Inicio) donde el Header ahora muestra su Avatar y Dropdown
-      // - Si es Staff (Admin / Psicólogo): redirige al Dashboard operativo (/panel)
-      if (data.usuario.rol === 'PACIENTE') {
-        router.push('/');
-      } else {
-        router.push('/panel');
+      // Redirección profesional por rol (Fase 6)
+      switch (data.usuario.rol) {
+        case 'ADMINISTRADOR':
+          router.push('/panel');
+          break;
+        case 'PSICOLOGO':
+          router.push('/psicologo');
+          break;
+        case 'RECEPCIONISTA':
+          router.push('/recepcion');
+          break;
+        case 'PACIENTE':
+        default:
+          router.push('/paciente');
+          break;
       }
     } catch (err: any) {
       setError(err.message || 'Credenciales incorrectas o error en el servidor');
@@ -138,7 +147,7 @@ export default function PaginaLogin() {
             <span>Acceso rápido para pruebas (1 clic)</span>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2.5">
+          <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {accesosDemo.map(({ rol, detalle, Icono, correo: c, clave, fondo }) => (
               <button
                 key={rol}

@@ -77,7 +77,7 @@ docker compose up -d
 4. Ejecuta las migraciones de Prisma y la siembra inicial de datos (*Seed*):
    ```bash
    npx prisma migrate dev --name init_axioma_db
-   npx prisma db seed
+   npm run prisma:seed
    ```
 
 5. Inicia el servidor backend en modo desarrollo:
@@ -85,6 +85,12 @@ docker compose up -d
    npm run start:dev
    ```
    El backend estará disponible en: **`http://localhost:4000/api`**
+
+6. *(Opcional)* Abrir el panel visual de base de datos **Prisma Studio**:
+   ```bash
+   npx prisma studio
+   ```
+   Prisma Studio estará disponible en: **`http://localhost:5555`**
 
 ---
 
@@ -115,13 +121,40 @@ docker compose up -d
 
 ## 👥 Credenciales de Prueba Pre-Cargadas (Seed)
 
-El comando `npx prisma db seed` crea automáticamente tres usuarios para probar todos los roles del sistema (con botones de 1-clic en la pantalla de inicio de sesión):
+El comando `npm run prisma:seed` crea automáticamente cuatro usuarios para probar todos los roles del sistema (con botones de 1-clic en la pantalla de inicio de sesión):
 
 | Rol | Correo Electrónico | Contraseña | Permisos y Alcance |
 |---|---|---|---|
-| **Administrador** | `admin@axioma.pe` | `admin123` | Control total del sistema, gestión de psicólogos, agenda central, catálogo de paquetes y pacientes. |
-| **Psicólogo** | `psicologo@axioma.pe` | `psico123` | Portal clínico, visualización de citas asignadas, registro de asistencia y notas de evolución SOAP. |
-| **Paciente** | `cliente@axioma.pe` | `cliente123` | Portal del paciente, visualización de paquete activo (4 sesiones), agendamiento de citas y saldo. |
+| **Administrador** | `admin@axioma.pe` | `admin123` | Control total del sistema (`/panel`): gestión de psicólogos con horarios, agenda central, catálogo de paquetes, directorio y reversión administrativa. |
+| **Psicólogo Colegiado** | `psicologo@axioma.pe` | `psico123` | Portal Clínico (`/psicologo`): agenda médica propia, predicción ML de riesgo, registro de asistencia, no-show y evolución confidencial SOAP. |
+| **Recepcionista** | `recepcion@axioma.pe` | `recepcion123` | Módulo de Recepción (`/recepcion`): gestión operativa de citas, agendamiento, asistencia, edición de fichas de pacientes y asignación de paquetes (HU-09). |
+| **Paciente** | `cliente@axioma.pe` | `cliente123` | Mi Portal (`/paciente`): visualización de paquete prepagado activo (consumo y saldo en vivo), agendamiento de sesiones y seguimiento. |
+
+---
+
+## 🛡️ Reglas de Negocio Implementadas (RN-01 a RN-54)
+
+El sistema incorpora las siguientes validaciones automatizadas a nivel de arquitectura y base de datos:
+
+1. **Gestión de Horarios y Disponibilidad (RN-11, RN-12, RN-34 a RN-42):**
+   - **Atención Hábil:** Lunes a Viernes de 09:00 a 18:00 y Sábados de 09:00 a 13:00.
+   - **Descanso Dominical (RN-36):** Rechazo automático de reservas en domingo.
+   - **Refrigerio Obligatorio (RN-37):** Bloqueo de citas entre 13:00 y 14:00 (L-V).
+   - **Feriados Nacionales (RN-40, RN-42):** Bloqueo automático para los 16 feriados oficiales del Perú (2026).
+   - **Prevención de Cruces (RN-11):** Validación atómica contra citas simultáneas del psicólogo y del paciente.
+   - **Disponibilidad por Terapeuta (RN-12, RN-35):** Solo se agendan sesiones en los días y rangos horarios registrados para el profesional.
+
+2. **Kardex Atómico y Paquetes de Sesiones (RN-02, RN-22, RN-23, RN-44 a RN-46):**
+   - **Evaluación vs. Terapia (RN-01, RN-02):** Las citas de `EVALUACION` nunca descuentan sesiones de paquete.
+   - **Anti-Doble Descuento (RN-46):** Registro de `MovimientoSesion(tipo: CONSUMO, cantidad: -1)` con restricción `@@unique([citaId, tipo])`.
+   - **Inasistencia / No-Show (RN-23):** Penalización de 1 sesión en caso de inasistencia a terapia.
+   - **Cancelación Anticipada vs. Tardía (RN-22, RN-23):** Cancelación $\ge$ 24h libera el cupo sin costo; cancelación tardía (< 24h) penaliza la sesión.
+   - **Reversión Administrativa:** Exclusiva para el Administrador, restituye el saldo consumido (`+1`) y registra auditoría.
+
+3. **Control de Acceso Basado en Roles - RBAC (RN-49):**
+   - Controladores protegidos con `JwtAuthGuard` y `RolesGuard`.
+   - Filtrado en base de datos para que psicólogos y pacientes solo accedan a sus registros.
+   - Confidencialidad médica: Notas SOAP accesibles únicamente por el psicólogo tratante y el Administrador.
 
 ---
 

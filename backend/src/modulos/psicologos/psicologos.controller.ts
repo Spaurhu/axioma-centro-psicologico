@@ -25,12 +25,15 @@ export class PsicologosController {
     return this.psicologosService.crear(dto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ADMINISTRADOR, Rol.RECEPCIONISTA, Rol.PSICOLOGO)
   @Get()
   async listar(@Query('soloActivos') soloActivos?: string) {
     return this.psicologosService.listar(soloActivos === 'true');
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ADMINISTRADOR, Rol.RECEPCIONISTA, Rol.PSICOLOGO)
   @Get(':id')
   async buscarPorId(@Param('id') id: string) {
     return this.psicologosService.buscarPorId(id);
