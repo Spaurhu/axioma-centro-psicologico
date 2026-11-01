@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  Users, UserCheck, Calendar, PackageCheck, Plus, LogOut,
-  BrainCircuit, RefreshCw, X, Search, CalendarClock, Clock, Printer
+  Users, UserCheck, Video, List, CalendarDays, ChevronLeft, ChevronRight, Calendar, PackageCheck, Plus, LogOut,
+  BrainCircuit, RefreshCw, X, Search, CalendarClock, Clock, Printer, CreditCard, Banknote
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { LogoAxioma } from '@/components/logo-axioma';
@@ -56,6 +56,8 @@ export default function PanelStaff() {
   const [psicologos, setPsicologos] = useState<any[]>([]);
   const [pacientes, setPacientes] = useState<any[]>([]);
   const [catalogoPaquetes, setCatalogoPaquetes] = useState<any[]>([]);
+  const [ingresosMes, setIngresosMes] = useState<number>(0);
+  const [conteoPagosMes, setConteoPagosMes] = useState<number>(0);
   const [cargando, setCargando] = useState(true);
 
   // Filtros
@@ -77,9 +79,57 @@ export default function PanelStaff() {
   const [mostrarModalAsignarPaquete, setMostrarModalAsignarPaquete] = useState(false);
   const [pacienteSeleccionadoParaPaquete, setPacienteSeleccionadoParaPaquete] = useState<any>(null);
 
+  const [mostrarModalPago, setMostrarModalPago] = useState(false);
+  const [paqueteSeleccionadoParaPago, setPaqueteSeleccionadoParaPago] = useState<any>(null);
+  const [pacienteSeleccionadoParaPago, setPacienteSeleccionadoParaPago] = useState<any>(null);
+  const [guardandoPago, setGuardandoPago] = useState(false);
+  const [formPago, setFormPago] = useState({
+    monto: 0,
+    metodoPago: 'Efectivo en recepción',
+    notas: '',
+  });
+
   const [mostrarModalCrearPaquete, setMostrarModalCrearPaquete] = useState(false);
 
   const hoyStr = new Date().toISOString().split('T')[0];
+
+  // Vista Agenda: Lista vs Calendario
+  const [vistaAgenda, setVistaAgenda] = useState<'lista' | 'calendario'>('lista');
+  const [fechaSemanaCalendario, setFechaSemanaCalendario] = useState<Date>(() => {
+    const d = new Date();
+    const dia = d.getDay();
+    const diff = d.getDate() - dia + (dia === 0 ? -6 : 1);
+    const lunes = new Date(d.setDate(diff));
+    lunes.setHours(0, 0, 0, 0);
+    return lunes;
+  });
+  const diasSemanaCalendario = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(fechaSemanaCalendario);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const horasJornada = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+  const navegarSemana = (delta: number) => {
+    setFechaSemanaCalendario((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + delta);
+      return d;
+    });
+  };
+  const irSemanaActual = () => {
+    const d = new Date();
+    const dia = d.getDay();
+    const diff = d.getDate() - dia + (dia === 0 ? -6 : 1);
+    const lunes = new Date(d.setDate(diff));
+    lunes.setHours(0, 0, 0, 0);
+    setFechaSemanaCalendario(lunes);
+  };
+  const [mostrarModalDetalle, setMostrarModalDetalle] = useState(false);
+  const [citaSeleccionadaParaDetalle, setCitaSeleccionadaParaDetalle] = useState<any>(null);
+  const abrirDetalleCita = (cita: any) => {
+    setCitaSeleccionadaParaDetalle(cita);
+    setMostrarModalDetalle(true);
+  };
 
   // Formularios
   const [formCita, setFormCita] = useState({
@@ -88,6 +138,7 @@ export default function PanelStaff() {
     fecha: hoyStr,
     horarioIndex: '0',
     motivoConsulta: '',
+    modalidad: 'PRESENCIAL' as 'PRESENCIAL' | 'VIRTUAL',
   });
 
   const [formReprogramar, setFormReprogramar] = useState({
@@ -157,16 +208,11 @@ export default function PanelStaff() {
       return;
     }
     const u = JSON.parse(usuarioGuardado);
-    if (u.rol === 'PACIENTE') {
-      router.push('/paciente');
-      return;
-    }
-    if (u.rol === 'PSICOLOGO') {
-      router.push('/psicologo');
-      return;
-    }
-    if (u.rol === 'RECEPCIONISTA') {
-      router.push('/recepcion');
+    if (u.rol !== 'ADMINISTRADOR') {
+      if (u.rol === 'PACIENTE') router.push('/paciente');
+      else if (u.rol === 'PSICOLOGO') router.push('/psicologo');
+      else if (u.rol === 'RECEPCIONISTA') router.push('/recepcion');
+      else router.push('/login');
       return;
     }
     setUsuario(u);
@@ -189,6 +235,17 @@ export default function PanelStaff() {
       setPsicologos(dataPsicos || []);
       setPacientes(dataPacientes || []);
       setCatalogoPaquetes(dataPaquetes || []);
+
+      const usuarioLocal = usuario || (typeof window !== 'undefined' && localStorage.getItem('axioma_usuario') ? JSON.parse(localStorage.getItem('axioma_usuario')!) : null);
+      if (usuarioLocal?.rol === 'ADMINISTRADOR') {
+        try {
+          const dataPagos = await apiFetch('/pagos');
+          setIngresosMes(Number(dataPagos?.totalMes || 0));
+          setConteoPagosMes(Number(dataPagos?.conteo || 0));
+        } catch (e) {
+          console.warn('Error al cargar pagos del mes:', e);
+        }
+      }
     } catch (err) {
       console.error('Error al cargar datos:', err);
     } finally {
@@ -268,6 +325,7 @@ export default function PanelStaff() {
           fechaHoraInicio,
           fechaHoraFin,
           motivoConsulta: formCita.motivoConsulta || 'Consulta terapéutica',
+          modalidad: formCita.modalidad,
         }),
       });
       toast.success('Cita agendada exitosamente.');
@@ -278,6 +336,7 @@ export default function PanelStaff() {
         fecha: hoyStr,
         horarioIndex: '0',
         motivoConsulta: '',
+        modalidad: 'PRESENCIAL',
       });
       cargarDatos();
     } catch (err: any) {
@@ -616,11 +675,46 @@ export default function PanelStaff() {
           metodoPago: formAsignarPaquete.metodoPago,
         }),
       });
-      toast.success('Paquete terapéutico asignado exitosamente al paciente.');
+      toast.success('Paquete asignado en estado PENDIENTE DE PAGO. Registra el pago para activarlo.');
       setMostrarModalAsignarPaquete(false);
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al asignar paquete');
+    }
+  };
+
+  // --- REGISTRAR PAGO DE PAQUETE (ACTIVACIÓN) ---
+  const abrirModalRegistrarPago = (paquete: any, paciente: any) => {
+    setPaqueteSeleccionadoParaPago(paquete);
+    setPacienteSeleccionadoParaPago(paciente);
+    setFormPago({
+      monto: Number(paquete.paquete?.precio || 0),
+      metodoPago: 'Efectivo en recepción',
+      notas: '',
+    });
+    setMostrarModalPago(true);
+  };
+
+  const handleRegistrarPago = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paqueteSeleccionadoParaPago) return;
+    setGuardandoPago(true);
+    try {
+      await apiFetch(`/paquetes/${paqueteSeleccionadoParaPago.id}/registrar-pago`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          monto: Number(formPago.monto),
+          metodoPago: formPago.metodoPago,
+          notas: formPago.notas,
+        }),
+      });
+      toast.success('Pago registrado exitosamente. El paquete ahora está ACTIVO.');
+      setMostrarModalPago(false);
+      cargarDatos();
+    } catch (err: any) {
+      toast.error(err.message || 'Error al registrar pago');
+    } finally {
+      setGuardandoPago(false);
     }
   };
 
@@ -652,7 +746,7 @@ export default function PanelStaff() {
     }
   };
 
-  const esPsicologo = usuario?.rol === 'PSICOLOGO';
+  const esAdmin = usuario?.rol === 'ADMINISTRADOR';
 
   // Filtros en memoria
   const pacientesFiltrados = pacientes.filter((p) => {
@@ -664,14 +758,12 @@ export default function PanelStaff() {
     );
   });
 
-  const citasFiltradas = esPsicologo
-    ? citas.filter((c) => c.psicologo?.usuarioId === usuario?.id || c.psicologoId === usuario?.perfil?.id)
-    : citas;
+  const citasFiltradas = citas;
 
   const citasAtendidas = citasFiltradas.filter((c) => c.estado === 'ATENDIDA').length;
 
   const pestanas: { id: Tab; Icono: typeof Calendar; texto: string; soloAdmin: boolean }[] = [
-    { id: 'agenda', Icono: Calendar, texto: esPsicologo ? 'Mis Citas & Pacientes' : 'Agenda Central & ML', soloAdmin: false },
+    { id: 'agenda', Icono: Calendar, texto: 'Agenda Central & ML', soloAdmin: false },
     { id: 'psicologos', Icono: UserCheck, texto: 'Cuerpo Psicológico', soloAdmin: true },
     { id: 'pacientes', Icono: Users, texto: 'Directorio de Pacientes', soloAdmin: true },
     { id: 'paquetes', Icono: PackageCheck, texto: 'Paquetes Terapéuticos', soloAdmin: true },
@@ -679,14 +771,25 @@ export default function PanelStaff() {
 
   const metricas = [
     { etiqueta: 'Citas registradas', valor: citasFiltradas.length, nota: `${citasAtendidas} atendidas`, fondo: 'bg-axioma-100 border-axioma-200', notaClase: 'text-axioma-700' },
+    ...(esAdmin
+      ? [
+          {
+            etiqueta: 'Ingresos del Mes',
+            valor: `S/. ${ingresosMes.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            nota: `${conteoPagosMes} cobro(s)`,
+            fondo: 'bg-emerald-50 border-emerald-200',
+            notaClase: 'text-emerald-700 font-bold',
+            Icono: Banknote,
+            iconoClase: 'text-emerald-600',
+          },
+        ]
+      : []),
     { etiqueta: 'Modelo Machine Learning', valor: '84.6%', nota: 'ROC-AUC 0.87', fondo: 'bg-heather border-white/60', notaClase: 'text-axioma-700' },
     { etiqueta: 'Pacientes en el centro', valor: pacientes.length, nota: 'Tratamiento activo', fondo: 'bg-white border-axioma-200/70', notaClase: 'text-axiomaText-soft' },
     { etiqueta: 'Psicólogos activos', valor: psicologos.length, nota: 'Colegiados C.Ps.P.', fondo: 'bg-axioma-100 border-axioma-200', notaClase: 'text-axioma-700' },
   ];
 
-  const tituloVista = esPsicologo
-    ? 'Portal Clínico & Seguimiento Terapéutico'
-    : tabActiva === 'agenda' ? 'Agenda Central & Predicción ML'
+  const tituloVista = tabActiva === 'agenda' ? 'Agenda Central & Predicción ML'
       : tabActiva === 'psicologos' ? 'Personal Médico Colegiado'
         : tabActiva === 'pacientes' ? 'Directorio de Pacientes'
           : 'Catálogo de Paquetes Terapéuticos';
@@ -698,7 +801,7 @@ export default function PanelStaff() {
       <aside className="flex shrink-0 flex-col gap-4 bg-axioma-900 p-4 text-white lg:sticky lg:top-0 lg:h-screen lg:w-72 lg:justify-between lg:gap-0 lg:p-6">
         <div>
           <div className="flex items-center justify-between">
-            <LogoAxioma oscuro subtitulo={esPsicologo ? 'Portal Clínico C.Ps.P.' : 'Panel de Dirección'} />
+            <LogoAxioma oscuro subtitulo="Panel de Dirección" />
             <button
               onClick={cerrarSesion}
               title="Cerrar Sesión"
@@ -714,7 +817,7 @@ export default function PanelStaff() {
             aria-label="Secciones del panel"
           >
             {pestanas
-              .filter((p) => !p.soloAdmin || !esPsicologo)
+              .filter((p) => !p.soloAdmin || esAdmin)
               .map(({ id, Icono, texto }) => (
                 <button
                   key={id}
@@ -740,7 +843,7 @@ export default function PanelStaff() {
                 {usuario?.perfil?.nombres ? `${usuario.perfil.nombres} ${usuario.perfil.apellidos}` : usuario?.correo}
               </p>
               <p className="text-xs font-medium text-axioma-200">
-                {esPsicologo ? 'Psicólogo(a) Colegiado(a)' : 'Administrador del Centro'}
+                Administrador del Centro
               </p>
             </div>
             <button
@@ -766,9 +869,7 @@ export default function PanelStaff() {
                 {tituloVista}
               </h1>
               <p className="mt-1 text-sm text-axiomaText-soft">
-                {esPsicologo
-                  ? 'Control confidencial de consultas, asistencia, notas SOAP y reprogramación.'
-                  : 'Supervisión en vivo de sesiones, psicólogos, pacientes y paquetes terapéuticos.'}
+                Supervisión en vivo de sesiones, psicólogos, pacientes y paquetes terapéuticos.
               </p>
             </div>
 
@@ -786,7 +887,7 @@ export default function PanelStaff() {
               )}
 
               {/* Botón Nuevo Psicólogo */}
-              {!esPsicologo && tabActiva === 'psicologos' && (
+              {esAdmin && tabActiva === 'psicologos' && (
                 <button onClick={() => setMostrarModalPsicologo(true)} className={`${btnPrimary} ${tamMd}`}>
                   <Plus className="h-4 w-4" />
                   <span>Registrar psicólogo</span>
@@ -794,7 +895,7 @@ export default function PanelStaff() {
               )}
 
               {/* Botón Crear Paquete */}
-              {!esPsicologo && tabActiva === 'paquetes' && (
+              {esAdmin && tabActiva === 'paquetes' && (
                 <button onClick={() => setMostrarModalCrearPaquete(true)} className={`${btnPrimary} ${tamMd}`}>
                   <Plus className="h-4 w-4" />
                   <span>Crear paquete</span>
@@ -804,12 +905,15 @@ export default function PanelStaff() {
           </div>
 
           {/* Métricas */}
-          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {metricas.map((m) => (
+          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {metricas.map((m: any) => (
               <div key={m.etiqueta} className={`rounded-card border p-5 shadow-card ${m.fondo}`}>
-                <span className="text-sm font-medium text-axiomaText-soft">{m.etiqueta}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-axiomaText-soft">{m.etiqueta}</span>
+                  {m.Icono && <m.Icono className={`h-4 w-4 ${m.iconoClase || 'text-axiomaText-soft'}`} />}
+                </div>
                 <div className="mt-2 flex items-baseline justify-between gap-2">
-                  <span className="font-display text-4xl font-medium tracking-heading text-axiomaText-ink">
+                  <span className="font-display text-3xl font-medium tracking-heading text-axiomaText-ink">
                     {m.valor}
                   </span>
                   <span className={`text-xs font-semibold ${m.notaClase}`}>{m.nota}</span>
@@ -881,10 +985,31 @@ export default function PanelStaff() {
                     Hoy
                   </button>
                 </div>
+
+                {/* Selector Vista Lista vs Vista Calendario */}
+                <div className="flex items-center rounded-lg border border-axioma-200 bg-axioma-50/70 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setVistaAgenda('lista')}
+                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${vistaAgenda === 'lista' ? 'bg-white text-axiomaText-ink shadow-sm' : 'text-axiomaText-soft hover:text-axiomaText-ink'}`}
+                  >
+                    <List className="h-3.5 w-3.5" />
+                    <span>Vista Lista</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVistaAgenda('calendario')}
+                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${vistaAgenda === 'calendario' ? 'bg-white text-axiomaText-ink shadow-sm' : 'text-axiomaText-soft hover:text-axiomaText-ink'}`}
+                  >
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    <span>Vista Calendario</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Tabla de Citas */}
-              <div className={`${card} overflow-hidden`}>
+              {/* VISTA LISTA */}
+              {vistaAgenda === 'lista' && (
+                <div className={`${card} overflow-hidden`}>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[1050px] text-left text-sm text-axiomaText-soft">
                     <thead className="border-b border-axioma-100 bg-axioma-50">
@@ -987,11 +1112,159 @@ export default function PanelStaff() {
                   </table>
                 </div>
               </div>
+            )}
+
+              {/* VISTA CALENDARIO SEMANAL */}
+              {vistaAgenda === 'calendario' && (
+                <div className={`${card} p-5 space-y-4`}>
+                  {/* Cabecera de Navegación de Semana */}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-axioma-100 pb-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navegarSemana(-7)}
+                        className={`${btnSecondary} p-2 text-xs`}
+                        title="Semana anterior"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => irSemanaActual()}
+                        className={`${btnSecondary} px-3 py-1.5 text-xs font-semibold`}
+                      >
+                        Semana actual
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navegarSemana(7)}
+                        className={`${btnSecondary} p-2 text-xs`}
+                        title="Semana siguiente"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                      <span className="font-display text-sm font-semibold text-axiomaText-ink ml-2">
+                        {diasSemanaCalendario[0].toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })} — {diasSemanaCalendario[6].toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+
+                    {/* Leyenda de Colores */}
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                      <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                        <span className="h-3 w-3 rounded-sm border border-emerald-400 bg-emerald-100" />
+                        <span>Atendida</span>
+                      </span>
+                      <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                        <span className="h-3 w-3 rounded-sm border border-blue-400 bg-blue-100" />
+                        <span>Programada Presencial</span>
+                      </span>
+                      <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                        <span className="h-3 w-3 rounded-sm border border-sky-400 bg-sky-100 ring-1 ring-sky-300" />
+                        <span>Programada Virtual</span>
+                      </span>
+                      <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                        <span className="h-3 w-3 rounded-sm border border-rose-400 bg-rose-100" />
+                        <span>Cancelada / No asistió</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Grilla Semanal */}
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[900px]">
+                      {/* Cabecera de Días (7 columnas) */}
+                      <div className="grid grid-cols-8 border-b border-axioma-200 text-center text-xs font-semibold">
+                        <div className="p-2.5 text-axiomaText-soft border-r border-axioma-100 bg-slate-50/70">Hora</div>
+                        {diasSemanaCalendario.map((dia, idx) => {
+                          const esHoy = fechaYmdLocal(dia.toISOString()) === hoyStr;
+                          const nombresDias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+                          return (
+                            <div
+                              key={idx}
+                              className={`p-2.5 border-r border-axioma-100 last:border-r-0 ${
+                                esHoy ? 'bg-axioma-100/70 text-axioma-900 font-bold' : 'text-axiomaText-ink bg-slate-50/40'
+                              }`}
+                            >
+                              <div>{nombresDias[idx]}</div>
+                              <div className={`mt-0.5 text-[11px] font-normal ${esHoy ? 'text-axioma-800 font-bold' : 'text-axiomaText-soft'}`}>
+                                {dia.toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Filas de Horas */}
+                      {horasJornada.map((horaStr) => (
+                        <div key={horaStr} className="grid grid-cols-8 border-b border-axioma-100 min-h-[82px]">
+                          {/* Etiqueta de Hora */}
+                          <div className="p-2 border-r border-axioma-100 text-[11px] font-medium text-axiomaText-soft flex items-start justify-center bg-slate-50/50">
+                            {horaStr}
+                          </div>
+
+                          {/* Celdas de cada día */}
+                          {diasSemanaCalendario.map((diaDate, colIdx) => {
+                            const diaYmd = fechaYmdLocal(diaDate.toISOString());
+                            const fuente = todasLasCitas && todasLasCitas.length > 0 ? todasLasCitas : citas;
+                            const citasEnSlot = fuente.filter((c) => {
+                              const cYmd = fechaYmdLocal(c.fechaHoraInicio);
+                              const cHor = horaHmLocal(c.fechaHoraInicio);
+                              return cYmd === diaYmd && cHor.startsWith(horaStr.slice(0, 2));
+                            });
+
+                            return (
+                              <div
+                                key={colIdx}
+                                className="p-1 border-r border-axioma-100 last:border-r-0 space-y-1 bg-white hover:bg-slate-50/40 transition-colors"
+                              >
+                                {citasEnSlot.map((c) => {
+                                  const esAtendida = c.estado === 'ATENDIDA';
+                                  const esCancelada = c.estado === 'CANCELADA' || c.estado === 'NO_ASISTIO';
+                                  const esVirtual = c.modalidad === 'VIRTUAL';
+
+                                  let colorClase = 'border-blue-300 bg-blue-100/90 text-blue-950 hover:bg-blue-200';
+                                  if (esAtendida) {
+                                    colorClase = 'border-emerald-300 bg-emerald-100/90 text-emerald-950 hover:bg-emerald-200';
+                                  } else if (esCancelada) {
+                                    colorClase = 'border-rose-300 bg-rose-100/90 text-rose-950 hover:bg-rose-200';
+                                  } else if (esVirtual) {
+                                    colorClase = 'border-sky-300 bg-sky-100/90 text-sky-950 hover:bg-sky-200 ring-1 ring-sky-300';
+                                  }
+
+                                  return (
+                                    <button
+                                      key={c.id}
+                                      type="button"
+                                      onClick={() => abrirDetalleCita(c)}
+                                      className={`w-full text-left p-1.5 rounded-lg border text-xs shadow-sm transition-transform hover:scale-[1.02] cursor-pointer ${colorClase}`}
+                                    >
+                                      <div className="font-bold truncate text-[11px] leading-tight">
+                                        {c.paciente ? `${c.paciente.nombres} ${c.paciente.apellidos?.split(' ')[0]}` : 'Paciente'}
+                                      </div>
+                                      <div className="text-[10px] opacity-80 truncate">
+                                        {c.psicologo?.nombres?.split(' ')[0]}
+                                      </div>
+                                      <div className="mt-1 flex items-center justify-between text-[9px] font-semibold opacity-90">
+                                        <span>{horaCorta(c.fechaHoraInicio)}</span>
+                                        {esVirtual ? <span className="text-sky-700 font-bold">Virtual</span> : <span>Presencial</span>}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* ----------------- TAB: PSICÓLOGOS ----------------- */}
-          {!esPsicologo && tabActiva === 'psicologos' && (
+          {esAdmin && tabActiva === 'psicologos' && (
             <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {psicologos.map((p) => (
                 <div key={p.id} className={`${card} p-6`}>
@@ -1029,7 +1302,7 @@ export default function PanelStaff() {
           )}
 
           {/* ----------------- TAB: PACIENTES ----------------- */}
-          {!esPsicologo && tabActiva === 'pacientes' && (
+          {esAdmin && tabActiva === 'pacientes' && (
             <div className="mt-6 space-y-4">
               {/* Buscador de Pacientes por DNI / Nombre (HU-07) */}
               <div className={`${card} flex items-center gap-3 p-4`}>
@@ -1079,14 +1352,30 @@ export default function PanelStaff() {
                               <td className={tdClase}>{pac.telefono || pac.correo || 'N/A'}</td>
                               <td className={tdClase}>
                                 {paqueteActivo ? (
-                                  <span className="font-semibold text-axiomaText-ink">{paqueteActivo.paquete?.nombre}</span>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="font-semibold text-axiomaText-ink">{paqueteActivo.paquete?.nombre}</span>
+                                    {paqueteActivo.estado === 'PENDIENTE_PAGO' ? (
+                                      <span className="inline-flex items-center gap-1 w-fit rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-300">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                        PENDIENTE PAGO
+                                      </span>
+                                    ) : paqueteActivo.estado === 'VENCIDO' ? (
+                                      <span className="inline-flex items-center gap-1 w-fit rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-800 ring-1 ring-rose-300">
+                                        VENCIDO
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 w-fit rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-300">
+                                        ACTIVO
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : (
                                   <span className="text-xs text-axiomaText-soft">Sin paquete asignado</span>
                                 )}
                               </td>
                               <td className={tdClase}>
                                 {paqueteActivo ? (
-                                  <span className={`${pastilla} bg-axioma-100 text-axioma-800`}>
+                                  <span className={`${pastilla} ${paqueteActivo.estado === 'PENDIENTE_PAGO' ? 'bg-amber-100 text-amber-900 font-bold' : 'bg-axioma-100 text-axioma-800'}`}>
                                     {paqueteActivo.sesionesRestantes} sesiones
                                   </span>
                                 ) : (
@@ -1094,18 +1383,28 @@ export default function PanelStaff() {
                                 )}
                               </td>
                               <td className={`${tdClase} text-right`}>
-                                <div className="flex items-center justify-end gap-2">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {paqueteActivo && paqueteActivo.estado === 'PENDIENTE_PAGO' && (
+                                    <button
+                                      onClick={() => abrirModalRegistrarPago(paqueteActivo, pac)}
+                                      title="Registrar pago y activar paquete"
+                                      className="inline-flex items-center gap-1 rounded-xl bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                    >
+                                      <CreditCard className="h-3.5 w-3.5" />
+                                      Registrar Pago
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => abrirModalEditarPaciente(pac)}
                                     title="Modificar datos del paciente"
-                                    className={`${btnSecondary} px-3 py-1.5 text-xs`}
+                                    className={`${btnSecondary} px-2.5 py-1.5 text-xs`}
                                   >
                                     Editar
                                   </button>
                                   <button
                                     onClick={() => abrirModalAsignarPaquete(pac)}
                                     title="Asignar paquete prepagado"
-                                    className={`${btnPrimary} px-3 py-1.5 text-xs`}
+                                    className={`${btnPrimary} px-2.5 py-1.5 text-xs`}
                                   >
                                     + Paquete
                                   </button>
@@ -1123,7 +1422,7 @@ export default function PanelStaff() {
           )}
 
           {/* ----------------- TAB: PAQUETES ----------------- */}
-          {!esPsicologo && tabActiva === 'paquetes' && (
+          {esAdmin && tabActiva === 'paquetes' && (
             <div className="mt-6 grid gap-5 md:grid-cols-3">
               {catalogoPaquetes.map((pkg, idx) => (
                 <div
@@ -1147,6 +1446,153 @@ export default function PanelStaff() {
           )}
         </div>
       </main>
+
+
+      {/* ========================================================================= */}
+      {/* MODAL DETALLES DE CITA DESDE EL CALENDARIO (ADMIN) */}
+      {/* ========================================================================= */}
+      {mostrarModalDetalle && citaSeleccionadaParaDetalle && (
+        <div className={modalOverlay}>
+          <div className={modalWrap}>
+            <div className={`${modalCard} max-w-lg`} role="dialog" aria-modal="true">
+              <div className="flex items-start justify-between border-b border-axioma-100 pb-3">
+                <div>
+                  <span className={`inline-block mb-1 ${pastilla} ${claseEstadoCita(citaSeleccionadaParaDetalle.estado)}`}>
+                    {citaSeleccionadaParaDetalle.estado}
+                  </span>
+                  <h3 className="font-display text-xl font-medium tracking-heading text-axiomaText-ink">
+                    Ficha de Consulta Médica
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalDetalle(false)}
+                  className="rounded-full p-1 text-axiomaText-soft hover:bg-slate-100"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="rounded-card-sm bg-slate-50 p-3.5 border border-slate-200 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-axiomaText-soft font-semibold">Paciente:</span>
+                    <span className="font-bold text-axiomaText-ink text-sm">
+                      {citaSeleccionadaParaDetalle.paciente ? `${citaSeleccionadaParaDetalle.paciente.nombres} ${citaSeleccionadaParaDetalle.paciente.apellidos}` : 'Paciente'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-axiomaText-soft font-semibold">DNI:</span>
+                    <span className="text-axiomaText-ink text-xs">{citaSeleccionadaParaDetalle.paciente?.dni || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-axiomaText-soft font-semibold">Terapeuta tratante:</span>
+                    <span className="font-semibold text-axiomaText-ink text-xs">
+                      {citaSeleccionadaParaDetalle.psicologo ? `${citaSeleccionadaParaDetalle.psicologo.nombres} ${citaSeleccionadaParaDetalle.psicologo.apellidos}` : 'Terapeuta'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-axiomaText-soft font-semibold">Fecha y Horario:</span>
+                    <span className="font-semibold text-axioma-800 text-xs">
+                      {fechaCorta(citaSeleccionadaParaDetalle.fechaHoraInicio)} ({horaCorta(citaSeleccionadaParaDetalle.fechaHoraInicio)} - {horaCorta(citaSeleccionadaParaDetalle.fechaHoraFin)})
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-axiomaText-soft font-semibold">Modalidad:</span>
+                    <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-bold ${citaSeleccionadaParaDetalle.modalidad === 'VIRTUAL' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-800'}`}>
+                      {citaSeleccionadaParaDetalle.modalidad === 'VIRTUAL' ? 'Virtual (Meet)' : 'Presencial'}
+                    </span>
+                  </div>
+                  {citaSeleccionadaParaDetalle.enlaceVideo && (
+                    <div className="pt-2 border-t border-slate-200">
+                      <a
+                        href={citaSeleccionadaParaDetalle.enlaceVideo}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-button bg-sky-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-700 shadow-sm"
+                      >
+                        <Video className="h-4 w-4" />
+                        <span>Unirse a Videollamada (Google Meet)</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-xs font-semibold text-axiomaText-soft">Motivo de consulta:</span>
+                  <p className="mt-1 text-xs text-axiomaText-ink bg-white p-2.5 rounded border border-axioma-100">
+                    {citaSeleccionadaParaDetalle.motivoConsulta || 'Consulta terapéutica regular'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Acciones */}
+              <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-axioma-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const c = citaSeleccionadaParaDetalle;
+                    setMostrarModalDetalle(false);
+                    abrirModalNota(c);
+                  }}
+                  className={`${btnSecondary} px-3 py-1.5 text-xs`}
+                >
+                  Nota SOAP
+                </button>
+
+                {citaSeleccionadaParaDetalle.estado === 'PROGRAMADA' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const c = citaSeleccionadaParaDetalle;
+                        setMostrarModalDetalle(false);
+                        handleMarcarAsistencia(c);
+                      }}
+                      className={`${btnPrimary} px-3 py-1.5 text-xs`}
+                    >
+                      Asistencia
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const c = citaSeleccionadaParaDetalle;
+                        setMostrarModalDetalle(false);
+                        abrirModalReprogramar(c);
+                      }}
+                      className={`${btnSecondary} px-3 py-1.5 text-xs`}
+                    >
+                      Reprogramar
+                    </button>
+                  </>
+                )}
+
+                {(citaSeleccionadaParaDetalle.estado === 'ATENDIDA' || citaSeleccionadaParaDetalle.estado === 'NO_ASISTIO' || citaSeleccionadaParaDetalle.estado === 'CANCELADA') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const c = citaSeleccionadaParaDetalle;
+                      setMostrarModalDetalle(false);
+                      handleRevertirCita(c);
+                    }}
+                    className="rounded-button border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition"
+                  >
+                    Revertir Cita
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalDetalle(false)}
+                  className={`${btnSecondary} px-3 py-1.5 text-xs`}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL 1: AGENDAR CITA CON FILTRADO EN TIEMPO REAL DE HORARIOS OCUPADOS */}
@@ -1238,6 +1684,34 @@ export default function PanelStaff() {
                     onChange={(e) => setFormCita({ ...formCita, motivoConsulta: e.target.value })}
                     className={input}
                   />
+                </div>
+
+                <div>
+                  <label className={label}>Modalidad de atención</label>
+                  <div className="grid grid-cols-2 gap-3 mt-1">
+                    <label className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 text-xs font-semibold transition ${formCita.modalidad === 'PRESENCIAL' ? 'border-axioma-600 bg-axioma-50 text-axioma-900 ring-1 ring-axioma-600' : 'border-axioma-200 bg-white text-axiomaText-soft hover:bg-slate-50'}`}>
+                      <input
+                        type="radio"
+                        name="modalidadCitaAdmin"
+                        value="PRESENCIAL"
+                        checked={formCita.modalidad === 'PRESENCIAL'}
+                        onChange={() => setFormCita({ ...formCita, modalidad: 'PRESENCIAL' })}
+                        className="text-axioma-600 focus:ring-axioma-500"
+                      />
+                      <span>🏢 Presencial</span>
+                    </label>
+                    <label className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 text-xs font-semibold transition ${formCita.modalidad === 'VIRTUAL' ? 'border-sky-600 bg-sky-50 text-sky-900 ring-1 ring-sky-600' : 'border-axioma-200 bg-white text-axiomaText-soft hover:bg-slate-50'}`}>
+                      <input
+                        type="radio"
+                        name="modalidadCitaAdmin"
+                        value="VIRTUAL"
+                        checked={formCita.modalidad === 'VIRTUAL'}
+                        onChange={() => setFormCita({ ...formCita, modalidad: 'VIRTUAL' })}
+                        className="text-sky-600 focus:ring-sky-500"
+                      />
+                      <span>📹 Virtual (Google Meet)</span>
+                    </label>
+                  </div>
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
@@ -1967,6 +2441,100 @@ export default function PanelStaff() {
                   </button>
                   <button type="submit" className={`${btnPrimary} ${tamMd}`}>
                     Guardar paquete
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: REGISTRAR PAGO DE PAQUETE (HU-09 / FLUJO FINANCIERO) */}
+      {/* ========================================================================= */}
+      {mostrarModalPago && paqueteSeleccionadoParaPago && (
+        <div className={modalOverlay}>
+          <div className={modalWrap}>
+            <div className={`${modalCard} max-w-lg`} role="dialog" aria-modal="true">
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                  <CreditCard className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink">
+                    Registrar Pago de Paquete
+                  </h3>
+                  <p className="text-xs text-axiomaText-soft">
+                    Paciente: <span className="font-semibold text-axiomaText-ink">{pacienteSeleccionadoParaPago?.nombres} {pacienteSeleccionadoParaPago?.apellidos}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200 text-sm">
+                <div className="flex justify-between items-center text-axiomaText-ink font-medium">
+                  <span>Paquete: {paqueteSeleccionadoParaPago?.paquete?.nombre || 'Paquete'}</span>
+                  <span className="text-emerald-700 font-semibold">{paqueteSeleccionadoParaPago?.paquete?.cantidadSesiones} sesiones</span>
+                </div>
+                <p className="text-xs text-axiomaText-muted mt-1">
+                  Al confirmar el pago, el paquete pasará de <span className="font-semibold text-amber-700">PENDIENTE DE PAGO</span> a <span className="font-semibold text-emerald-700">ACTIVO</span> y las sesiones se cargarán al Kardex para su consumo.
+                </p>
+              </div>
+
+              <form onSubmit={handleRegistrarPago} className="mt-5 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={label}>Monto a cobrar (S/.)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      required
+                      value={formPago.monto}
+                      onChange={(e) => setFormPago({ ...formPago, monto: Number(e.target.value) })}
+                      className={input}
+                    />
+                  </div>
+                  <div>
+                    <label className={label}>Método de pago</label>
+                    <select
+                      value={formPago.metodoPago}
+                      onChange={(e) => setFormPago({ ...formPago, metodoPago: e.target.value })}
+                      className={input}
+                    >
+                      <option value="Efectivo en recepción">Efectivo en recepción</option>
+                      <option value="Yape / Plin">Yape / Plin</option>
+                      <option value="Transferencia BCP/BBVA">Transferencia BCP/BBVA</option>
+                      <option value="Tarjeta débito/crédito">Tarjeta débito/crédito</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className={label}>Notas / Nro. Operación (opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Op. 128492 / Recibo N° 045"
+                    value={formPago.notas}
+                    onChange={(e) => setFormPago({ ...formPago, notas: e.target.value })}
+                    className={input}
+                  />
+                </div>
+
+                <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setMostrarModalPago(false)}
+                    disabled={guardandoPago}
+                    className={`${btnSecondary} ${tamMd}`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={guardandoPago}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                  >
+                    {guardandoPago ? 'Procesando...' : 'Confirmar Pago y Activar'}
                   </button>
                 </div>
               </form>

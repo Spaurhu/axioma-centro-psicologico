@@ -115,7 +115,7 @@ async function main() {
 
   const paciente = await prisma.paciente.upsert({
     where: { dni: '72345678' },
-    update: { usuarioId: userCliente.id, estaActivo: true },
+    update: { usuarioId: userCliente.id, estaActivo: true, correo: 'cliente@axioma.pe' },
     create: {
       usuarioId: userCliente.id,
       dni: '72345678',
@@ -147,6 +147,7 @@ async function main() {
         data: {
           pacienteId: paciente.id,
           paqueteId: paqueteEsencial.id,
+          psicologoId: psicologo.id,
           sesionesTotales: 4,
           sesionesConsumidas: 2,
           sesionesRestantes: 2,
@@ -156,11 +157,12 @@ async function main() {
         },
       });
       paquetePacienteId = nuevoPaquete.id;
-      console.log('✓ Paquete de 4 sesiones asignado a cliente@axioma.pe (2 consumidas, 2 restantes)');
+      console.log('✓ Paquete de 4 sesiones asignado a cliente@axioma.pe (2 consumidas, 2 restantes, vinculado a Dra. Diana)');
     } else {
       await prisma.paquetePaciente.update({
         where: { id: paqueteExistente.id },
         data: {
+          psicologoId: psicologo.id,
           sesionesTotales: 4,
           sesionesConsumidas: 2,
           sesionesRestantes: 2,
@@ -168,7 +170,7 @@ async function main() {
         },
       });
       paquetePacienteId = paqueteExistente.id;
-      console.log('✓ Paquete actualizado a 2 consumidas y 2 restantes para cliente@axioma.pe');
+      console.log('✓ Paquete actualizado a 2 consumidas y 2 restantes vinculado a Dra. Diana');
     }
 
     // Registrar MovimientoSesion de tipo COMPRA si no existe
@@ -191,6 +193,24 @@ async function main() {
           },
         });
         console.log('✓ Movimiento COMPRA (+4) registrado para el paquete de cliente@axioma.pe');
+      }
+
+      // Registrar Pago del paquete para que el dashboard de ingresos muestre datos reales
+      const pagoExistente = await prisma.pago.findFirst({
+        where: { paquetePacienteId },
+      });
+      if (!pagoExistente) {
+        await prisma.pago.create({
+          data: {
+            paquetePacienteId,
+            usuarioId: admin.id,
+            monto: 280.0,
+            metodoPago: 'Transferencia BCP',
+            fechaPago: new Date(),
+            notas: 'Pago de paquete de 4 sesiones (seed inicial)',
+          },
+        });
+        console.log('✓ Pago de S/. 280.00 registrado para cliente@axioma.pe');
       }
 
       // =========================================================================

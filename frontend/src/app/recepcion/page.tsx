@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  Users, Calendar, PackageCheck, Plus, LogOut,
-  RefreshCw, Search, Clock, CheckCircle2, XCircle, CalendarClock
+  Users, Calendar, Video, List, CalendarDays, ChevronLeft, ChevronRight, PackageCheck, Plus, LogOut,
+  RefreshCw, Search, Clock, CheckCircle2, XCircle, CalendarClock, CreditCard, X
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { LogoAxioma } from '@/components/logo-axioma';
@@ -75,7 +75,55 @@ export default function PanelRecepcion() {
   const [mostrarModalAsignarPaquete, setMostrarModalAsignarPaquete] = useState(false);
   const [pacienteSeleccionadoParaPaquete, setPacienteSeleccionadoParaPaquete] = useState<any>(null);
 
+  const [mostrarModalPago, setMostrarModalPago] = useState(false);
+  const [paqueteSeleccionadoParaPago, setPaqueteSeleccionadoParaPago] = useState<any>(null);
+  const [pacienteSeleccionadoParaPago, setPacienteSeleccionadoParaPago] = useState<any>(null);
+  const [guardandoPago, setGuardandoPago] = useState(false);
+  const [formPago, setFormPago] = useState({
+    monto: 0,
+    metodoPago: 'Efectivo en recepción',
+    notas: '',
+  });
+
   const hoyStr = new Date().toISOString().split('T')[0];
+
+  // Vista Agenda: Lista vs Calendario
+  const [vistaAgenda, setVistaAgenda] = useState<'lista' | 'calendario'>('lista');
+  const [fechaSemanaCalendario, setFechaSemanaCalendario] = useState<Date>(() => {
+    const d = new Date();
+    const dia = d.getDay();
+    const diff = d.getDate() - dia + (dia === 0 ? -6 : 1);
+    const lunes = new Date(d.setDate(diff));
+    lunes.setHours(0, 0, 0, 0);
+    return lunes;
+  });
+  const diasSemanaCalendario = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(fechaSemanaCalendario);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const horasJornada = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+  const navegarSemana = (delta: number) => {
+    setFechaSemanaCalendario((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + delta);
+      return d;
+    });
+  };
+  const irSemanaActual = () => {
+    const d = new Date();
+    const dia = d.getDay();
+    const diff = d.getDate() - dia + (dia === 0 ? -6 : 1);
+    const lunes = new Date(d.setDate(diff));
+    lunes.setHours(0, 0, 0, 0);
+    setFechaSemanaCalendario(lunes);
+  };
+  const [mostrarModalDetalle, setMostrarModalDetalle] = useState(false);
+  const [citaSeleccionadaParaDetalle, setCitaSeleccionadaParaDetalle] = useState<any>(null);
+  const abrirDetalleCita = (cita: any) => {
+    setCitaSeleccionadaParaDetalle(cita);
+    setMostrarModalDetalle(true);
+  };
 
   // Formularios
   const [formCita, setFormCita] = useState({
@@ -360,11 +408,50 @@ export default function PanelRecepcion() {
           metodoPago: formAsignarPaquete.metodoPago,
         }),
       });
-      toast.success('Paquete terapéutico asignado exitosamente al paciente.');
+      toast.success('Paquete asignado en estado PENDIENTE DE PAGO. Registra el pago para activarlo.');
       setMostrarModalAsignarPaquete(false);
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al asignar paquete');
+    }
+  };
+
+  // --- REGISTRAR PAGO DE PAQUETE (ACTIVACIÓN) ---
+  const abrirModalRegistrarPago = (paquete: any, paciente: any) => {
+    setPaqueteSeleccionadoParaPago(paquete);
+    setPacienteSeleccionadoParaPago(paciente);
+    setFormPago({
+      monto: Number(paquete.paquete?.precio || 0),
+      metodoPago: 'Efectivo en recepción',
+      notas: '',
+    });
+    setMostrarModalPago(true);
+  };
+
+  const handleRegistrarPago = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (usuario?.rol !== 'RECEPCIONISTA' && usuario?.rol !== 'ADMINISTRADOR') {
+      toast.error('Acción restringida al personal autorizado de recepción o administración.');
+      return;
+    }
+    if (!paqueteSeleccionadoParaPago) return;
+    setGuardandoPago(true);
+    try {
+      await apiFetch(`/paquetes/${paqueteSeleccionadoParaPago.id}/registrar-pago`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          monto: Number(formPago.monto),
+          metodoPago: formPago.metodoPago,
+          notas: formPago.notas,
+        }),
+      });
+      toast.success('Pago registrado exitosamente. El paquete ahora está ACTIVO.');
+      setMostrarModalPago(false);
+      cargarDatos();
+    } catch (err: any) {
+      toast.error(err.message || 'Error al registrar pago');
+    } finally {
+      setGuardandoPago(false);
     }
   };
 
@@ -507,13 +594,35 @@ export default function PanelRecepcion() {
                     </button>
                   )}
                 </div>
-                <div className="text-xs text-axiomaText-soft">
-                  Total citas: <strong className="text-axiomaText-ink">{citas.length}</strong> ({citasAtendidas} atendidas)
+                {/* Selector Vista Lista vs Vista Calendario */}
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-axiomaText-soft hidden sm:block">
+                    Total: <strong className="text-axiomaText-ink">{citas.length}</strong> ({citasAtendidas} atendidas)
+                  </div>
+                  <div className="flex items-center rounded-lg border border-axioma-200 bg-axioma-50/70 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setVistaAgenda('lista')}
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${vistaAgenda === 'lista' ? 'bg-white text-axiomaText-ink shadow-sm' : 'text-axiomaText-soft hover:text-axiomaText-ink'}`}
+                    >
+                      <List className="h-3.5 w-3.5" />
+                      <span>Vista Lista</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVistaAgenda('calendario')}
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${vistaAgenda === 'calendario' ? 'bg-white text-axiomaText-ink shadow-sm' : 'text-axiomaText-soft hover:text-axiomaText-ink'}`}
+                    >
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      <span>Vista Calendario</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Tabla de Citas */}
-              <div className={`${card} overflow-hidden`}>
+              {/* VISTA LISTA */}
+              {vistaAgenda === 'lista' && (
+                <div className={`${card} overflow-hidden`}>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[850px] text-left text-sm text-axiomaText-soft">
                     <thead className="border-b border-axioma-100 bg-axioma-50">
@@ -616,6 +725,154 @@ export default function PanelRecepcion() {
                   </table>
                 </div>
               </div>
+            )}
+
+              {/* VISTA CALENDARIO SEMANAL */}
+              {vistaAgenda === 'calendario' && (
+                <div className={`${card} p-5 space-y-4`}>
+                  {/* Cabecera de Navegación de Semana */}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-axioma-100 pb-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navegarSemana(-7)}
+                        className={`${btnSecondary} p-2 text-xs`}
+                        title="Semana anterior"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => irSemanaActual()}
+                        className={`${btnSecondary} px-3 py-1.5 text-xs font-semibold`}
+                      >
+                        Semana actual
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navegarSemana(7)}
+                        className={`${btnSecondary} p-2 text-xs`}
+                        title="Semana siguiente"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                      <span className="font-display text-sm font-semibold text-axiomaText-ink ml-2">
+                        {diasSemanaCalendario[0].toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })} — {diasSemanaCalendario[6].toLocaleDateString('es-PE', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+
+                    {/* Leyenda de Colores */}
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                      <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                        <span className="h-3 w-3 rounded-sm border border-emerald-400 bg-emerald-100" />
+                        <span>Atendida</span>
+                      </span>
+                      <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                        <span className="h-3 w-3 rounded-sm border border-blue-400 bg-blue-100" />
+                        <span>Programada Presencial</span>
+                      </span>
+                      <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                        <span className="h-3 w-3 rounded-sm border border-sky-400 bg-sky-100 ring-1 ring-sky-300" />
+                        <span>Programada Virtual</span>
+                      </span>
+                      <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                        <span className="h-3 w-3 rounded-sm border border-rose-400 bg-rose-100" />
+                        <span>Cancelada / No asistió</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Grilla Semanal */}
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[900px]">
+                      {/* Cabecera de Días (7 columnas) */}
+                      <div className="grid grid-cols-8 border-b border-axioma-200 text-center text-xs font-semibold">
+                        <div className="p-2.5 text-axiomaText-soft border-r border-axioma-100 bg-slate-50/70">Hora</div>
+                        {diasSemanaCalendario.map((dia, idx) => {
+                          const esHoy = fechaYmdLocal(dia.toISOString()) === hoyStr;
+                          const nombresDias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+                          return (
+                            <div
+                              key={idx}
+                              className={`p-2.5 border-r border-axioma-100 last:border-r-0 ${
+                                esHoy ? 'bg-axioma-100/70 text-axioma-900 font-bold' : 'text-axiomaText-ink bg-slate-50/40'
+                              }`}
+                            >
+                              <div>{nombresDias[idx]}</div>
+                              <div className={`mt-0.5 text-[11px] font-normal ${esHoy ? 'text-axioma-800 font-bold' : 'text-axiomaText-soft'}`}>
+                                {dia.toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Filas de Horas */}
+                      {horasJornada.map((horaStr) => (
+                        <div key={horaStr} className="grid grid-cols-8 border-b border-axioma-100 min-h-[82px]">
+                          {/* Etiqueta de Hora */}
+                          <div className="p-2 border-r border-axioma-100 text-[11px] font-medium text-axiomaText-soft flex items-start justify-center bg-slate-50/50">
+                            {horaStr}
+                          </div>
+
+                          {/* Celdas de cada día */}
+                          {diasSemanaCalendario.map((diaDate, colIdx) => {
+                            const diaYmd = fechaYmdLocal(diaDate.toISOString());
+                            const fuente = todasLasCitas && todasLasCitas.length > 0 ? todasLasCitas : citas;
+                            const citasEnSlot = fuente.filter((c) => {
+                              const cYmd = fechaYmdLocal(c.fechaHoraInicio);
+                              const cHor = horaHmLocal(c.fechaHoraInicio);
+                              return cYmd === diaYmd && cHor.startsWith(horaStr.slice(0, 2));
+                            });
+
+                            return (
+                              <div
+                                key={colIdx}
+                                className="p-1 border-r border-axioma-100 last:border-r-0 space-y-1 bg-white hover:bg-slate-50/40 transition-colors"
+                              >
+                                {citasEnSlot.map((c) => {
+                                  const esAtendida = c.estado === 'ATENDIDA';
+                                  const esCancelada = c.estado === 'CANCELADA' || c.estado === 'NO_ASISTIO';
+                                  const esVirtual = c.modalidad === 'VIRTUAL';
+
+                                  let colorClase = 'border-blue-300 bg-blue-100/90 text-blue-950 hover:bg-blue-200';
+                                  if (esAtendida) {
+                                    colorClase = 'border-emerald-300 bg-emerald-100/90 text-emerald-950 hover:bg-emerald-200';
+                                  } else if (esCancelada) {
+                                    colorClase = 'border-rose-300 bg-rose-100/90 text-rose-950 hover:bg-rose-200';
+                                  } else if (esVirtual) {
+                                    colorClase = 'border-sky-300 bg-sky-100/90 text-sky-950 hover:bg-sky-200 ring-1 ring-sky-300';
+                                  }
+
+                                  return (
+                                    <button
+                                      key={c.id}
+                                      type="button"
+                                      onClick={() => abrirDetalleCita(c)}
+                                      className={`w-full text-left p-1.5 rounded-lg border text-xs shadow-sm transition-transform hover:scale-[1.02] cursor-pointer ${colorClase}`}
+                                    >
+                                      <div className="font-bold truncate text-[11px] leading-tight">
+                                        {c.paciente ? `${c.paciente.nombres} ${c.paciente.apellidos?.split(' ')[0]}` : 'Paciente'}
+                                      </div>
+                                      <div className="text-[10px] opacity-80 truncate">
+                                        {c.psicologo?.nombres?.split(' ')[0]}
+                                      </div>
+                                      <div className="mt-1 flex items-center justify-between text-[9px] font-semibold opacity-90">
+                                        <span>{horaCorta(c.fechaHoraInicio)}</span>
+                                        {esVirtual ? <span className="text-sky-700 font-bold">Virtual</span> : <span>Presencial</span>}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -660,23 +917,51 @@ export default function PanelRecepcion() {
                         </tr>
                       ) : (
                         pacientesFiltrados.map((pac) => {
-                          const paqueteActivo = pac.paquetesPaciente?.[0];
+                          const paquetes = pac.paquetesPaciente || [];
+                          const paquetePendiente = paquetes.find((p: any) => p.estado === 'PENDIENTE_PAGO');
+                          const paqueteActivo = paquetes.find((p: any) => p.estado === 'ACTIVO');
+                          const paquetePrincipal = paquetePendiente || paqueteActivo || paquetes[0];
+
                           return (
                             <tr key={pac.id} className="transition-colors hover:bg-axioma-50">
                               <td className={`${tdClase} font-semibold tabular-nums text-axioma-700`}>{pac.dni}</td>
                               <td className={`${tdClase} font-semibold text-axiomaText-ink`}>{pac.nombres} {pac.apellidos}</td>
                               <td className={tdClase}>{pac.telefono || pac.correo || 'N/A'}</td>
                               <td className={tdClase}>
-                                {paqueteActivo ? (
-                                  <span className="font-semibold text-axiomaText-ink">{paqueteActivo.paquete?.nombre}</span>
+                                {paquetePrincipal ? (
+                                  <div className="space-y-1">
+                                    <span className="font-semibold text-axiomaText-ink block">
+                                      {paquetePrincipal.paquete?.nombre}
+                                    </span>
+                                    {paquetePrincipal.estado === 'PENDIENTE_PAGO' && (
+                                      <span className="inline-flex items-center gap-1 rounded-tag border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                        PENDIENTE PAGO
+                                      </span>
+                                    )}
+                                    {paquetePrincipal.estado === 'ACTIVO' && (
+                                      <span className="inline-flex items-center rounded-tag border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+                                        ACTIVO
+                                      </span>
+                                    )}
+                                    {paquetePrincipal.estado === 'VENCIDO' && (
+                                      <span className="inline-flex items-center rounded-tag border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-800">
+                                        VENCIDO
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : (
                                   <span className="text-xs text-axiomaText-soft">Sin paquete asignado</span>
                                 )}
                               </td>
                               <td className={tdClase}>
-                                {paqueteActivo ? (
+                                {paquetePrincipal?.estado === 'PENDIENTE_PAGO' ? (
+                                  <span className="text-xs font-medium text-amber-800">
+                                    Bloqueado ({paquetePrincipal.sesionesTotales} ses.)
+                                  </span>
+                                ) : paquetePrincipal?.estado === 'ACTIVO' ? (
                                   <span className={`${pastilla} bg-axioma-100 text-axioma-800`}>
-                                    {paqueteActivo.sesionesRestantes} sesiones
+                                    {paquetePrincipal.sesionesRestantes} sesiones
                                   </span>
                                 ) : (
                                   <span className="text-xs">0</span>
@@ -684,6 +969,16 @@ export default function PanelRecepcion() {
                               </td>
                               <td className={`${tdClase} text-right`}>
                                 <div className="flex items-center justify-end gap-2">
+                                  {(usuario?.rol === 'RECEPCIONISTA' || usuario?.rol === 'ADMINISTRADOR') && paquetePendiente && (
+                                    <button
+                                      onClick={() => abrirModalRegistrarPago(paquetePendiente, pac)}
+                                      title="Registrar pago y activar paquete"
+                                      className="flex items-center gap-1 rounded-button bg-amber-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-700"
+                                    >
+                                      <CreditCard className="h-3.5 w-3.5" />
+                                      <span>Registrar Pago</span>
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => abrirModalEditarPaciente(pac)}
                                     title="Modificar datos del paciente"
@@ -693,7 +988,7 @@ export default function PanelRecepcion() {
                                   </button>
                                   <button
                                     onClick={() => abrirModalAsignarPaquete(pac)}
-                                    title="Asignar paquete prepagado"
+                                    title="Asignar paquete"
                                     className={`${btnPrimary} px-3 py-1.5 text-xs`}
                                   >
                                     + Paquete
@@ -736,6 +1031,149 @@ export default function PanelRecepcion() {
           )}
         </div>
       </main>
+
+
+      {/* ========================================================================= */}
+      {/* MODAL DETALLES DE CITA DESDE EL CALENDARIO (RECEPCIÓN) */}
+      {/* ========================================================================= */}
+      {mostrarModalDetalle && citaSeleccionadaParaDetalle && (
+        <div className={modalOverlay}>
+          <div className={modalWrap}>
+            <div className={`${modalCard} max-w-lg`} role="dialog" aria-modal="true">
+              <div className="flex items-start justify-between border-b border-axioma-100 pb-3">
+                <div>
+                  <span className={`inline-block mb-1 ${pastilla} ${claseEstadoCita(citaSeleccionadaParaDetalle.estado)}`}>
+                    {citaSeleccionadaParaDetalle.estado}
+                  </span>
+                  <h3 className="font-display text-xl font-medium tracking-heading text-axiomaText-ink">
+                    Ficha de Consulta Médica
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalDetalle(false)}
+                  className="rounded-full p-1 text-axiomaText-soft hover:bg-slate-100"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="rounded-card-sm bg-slate-50 p-3.5 border border-slate-200 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-axiomaText-soft font-semibold">Paciente:</span>
+                    <span className="font-bold text-axiomaText-ink text-sm">
+                      {citaSeleccionadaParaDetalle.paciente ? `${citaSeleccionadaParaDetalle.paciente.nombres} ${citaSeleccionadaParaDetalle.paciente.apellidos}` : 'Paciente'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-axiomaText-soft font-semibold">DNI:</span>
+                    <span className="text-axiomaText-ink text-xs">{citaSeleccionadaParaDetalle.paciente?.dni || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-axiomaText-soft font-semibold">Terapeuta tratante:</span>
+                    <span className="font-semibold text-axiomaText-ink text-xs">
+                      {citaSeleccionadaParaDetalle.psicologo ? `${citaSeleccionadaParaDetalle.psicologo.nombres} ${citaSeleccionadaParaDetalle.psicologo.apellidos}` : 'Terapeuta'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-axiomaText-soft font-semibold">Fecha y Horario:</span>
+                    <span className="font-semibold text-axioma-800 text-xs">
+                      {fechaCorta(citaSeleccionadaParaDetalle.fechaHoraInicio)} ({horaCorta(citaSeleccionadaParaDetalle.fechaHoraInicio)} - {horaCorta(citaSeleccionadaParaDetalle.fechaHoraFin)})
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-axiomaText-soft font-semibold">Modalidad:</span>
+                    <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-bold ${citaSeleccionadaParaDetalle.modalidad === 'VIRTUAL' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-800'}`}>
+                      {citaSeleccionadaParaDetalle.modalidad === 'VIRTUAL' ? 'Virtual (Meet)' : 'Presencial'}
+                    </span>
+                  </div>
+                  {citaSeleccionadaParaDetalle.enlaceVideo && (
+                    <div className="pt-2 border-t border-slate-200">
+                      <a
+                        href={citaSeleccionadaParaDetalle.enlaceVideo}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-button bg-sky-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-700 shadow-sm"
+                      >
+                        <Video className="h-4 w-4" />
+                        <span>Unirse a Videollamada (Google Meet)</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-xs font-semibold text-axiomaText-soft">Motivo de consulta:</span>
+                  <p className="mt-1 text-xs text-axiomaText-ink bg-white p-2.5 rounded border border-axioma-100">
+                    {citaSeleccionadaParaDetalle.motivoConsulta || 'Consulta terapéutica regular'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Acciones */}
+              <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-axioma-100 pt-4">
+                {citaSeleccionadaParaDetalle.estado === 'PROGRAMADA' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const c = citaSeleccionadaParaDetalle;
+                        setMostrarModalDetalle(false);
+                        handleMarcarAsistencia(c);
+                      }}
+                      className={`${btnPrimary} px-3 py-1.5 text-xs`}
+                    >
+                      Asistencia
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const c = citaSeleccionadaParaDetalle;
+                        setMostrarModalDetalle(false);
+                        abrirModalReprogramar(c);
+                      }}
+                      className={`${btnSecondary} px-3 py-1.5 text-xs`}
+                    >
+                      Reprogramar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const c = citaSeleccionadaParaDetalle;
+                        setMostrarModalDetalle(false);
+                        handleMarcarNoAsistio(c);
+                      }}
+                      className="rounded-button border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+                    >
+                      No asistió
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const c = citaSeleccionadaParaDetalle;
+                        setMostrarModalDetalle(false);
+                        handleCancelarCita(c);
+                      }}
+                      className="rounded-button border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
+                    >
+                      Cancelar
+                    </button>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setMostrarModalDetalle(false)}
+                  className={`${btnSecondary} px-3 py-1.5 text-xs`}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL 1: AGENDAR CITA */}
@@ -1076,6 +1514,100 @@ export default function PanelRecepcion() {
                   </button>
                   <button type="submit" className={`${btnPrimary} ${tamMd}`}>
                     Asignar paquete
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: REGISTRAR PAGO DE PAQUETE */}
+      {/* ========================================================================= */}
+      {mostrarModalPago && paqueteSeleccionadoParaPago && (
+        <div className={modalOverlay}>
+          <div className={modalWrap}>
+            <div className={`${modalCard} max-w-lg`} role="dialog" aria-modal="true">
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                  <CreditCard className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink">
+                    Registrar Pago de Paquete
+                  </h3>
+                  <p className="text-xs text-axiomaText-soft">
+                    Paciente: <span className="font-semibold text-axiomaText-ink">{pacienteSeleccionadoParaPago?.nombres} {pacienteSeleccionadoParaPago?.apellidos}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200 text-sm">
+                <div className="flex justify-between items-center text-axiomaText-ink font-medium">
+                  <span>Paquete: {paqueteSeleccionadoParaPago?.paquete?.nombre || 'Paquete'}</span>
+                  <span className="text-emerald-700 font-semibold">{paqueteSeleccionadoParaPago?.paquete?.cantidadSesiones} sesiones</span>
+                </div>
+                <p className="text-xs text-axiomaText-muted mt-1">
+                  Al confirmar el pago, el paquete pasará de <span className="font-semibold text-amber-700">PENDIENTE DE PAGO</span> a <span className="font-semibold text-emerald-700">ACTIVO</span> y las sesiones se cargarán al Kardex para su consumo.
+                </p>
+              </div>
+
+              <form onSubmit={handleRegistrarPago} className="mt-5 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={label}>Monto a cobrar (S/.)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      required
+                      value={formPago.monto}
+                      onChange={(e) => setFormPago({ ...formPago, monto: Number(e.target.value) })}
+                      className={input}
+                    />
+                  </div>
+                  <div>
+                    <label className={label}>Método de pago</label>
+                    <select
+                      value={formPago.metodoPago}
+                      onChange={(e) => setFormPago({ ...formPago, metodoPago: e.target.value })}
+                      className={input}
+                    >
+                      <option value="Efectivo en recepción">Efectivo en recepción</option>
+                      <option value="Yape / Plin">Yape / Plin</option>
+                      <option value="Transferencia BCP/BBVA">Transferencia BCP/BBVA</option>
+                      <option value="Tarjeta débito/crédito">Tarjeta débito/crédito</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className={label}>Notas / Nro. Operación (opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Op. 128492 / Recibo N° 045"
+                    value={formPago.notas}
+                    onChange={(e) => setFormPago({ ...formPago, notas: e.target.value })}
+                    className={input}
+                  />
+                </div>
+
+                <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setMostrarModalPago(false)}
+                    disabled={guardandoPago}
+                    className={`${btnSecondary} ${tamMd}`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={guardandoPago}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                  >
+                    {guardandoPago ? 'Procesando...' : 'Confirmar Pago y Activar'}
                   </button>
                 </div>
               </form>

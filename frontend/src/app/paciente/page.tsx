@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Calendar, PackageCheck, LogOut, Plus, CheckCircle2, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Calendar, PackageCheck, Video, LogOut, Plus, CheckCircle2, ArrowLeft, AlertCircle } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { LogoAxioma } from '@/components/logo-axioma';
 import {
@@ -71,16 +71,11 @@ export default function PortalPaciente() {
       return;
     }
     const u = JSON.parse(usuarioGuardado);
-    if (u.rol === 'ADMINISTRADOR') {
-      router.push('/panel');
-      return;
-    }
-    if (u.rol === 'PSICOLOGO') {
-      router.push('/psicologo');
-      return;
-    }
-    if (u.rol === 'RECEPCIONISTA') {
-      router.push('/recepcion');
+    if (u.rol !== 'PACIENTE') {
+      if (u.rol === 'ADMINISTRADOR') router.push('/panel');
+      else if (u.rol === 'PSICOLOGO') router.push('/psicologo');
+      else if (u.rol === 'RECEPCIONISTA') router.push('/recepcion');
+      else router.push('/login');
       return;
     }
     setUsuario(u);
@@ -144,6 +139,11 @@ export default function PortalPaciente() {
     e.preventDefault();
     if (!pacienteInfo?.id) return;
 
+    if (!tienePaqueteActivo) {
+      toast.error('No cuentas con paquetes activos disponibles para agendar citas.');
+      return;
+    }
+
     const bloques = generarHorariosDisponibles(formCita.fecha);
     const bloque = bloques[parseInt(formCita.horarioIndex)] || bloques[0];
     if (!bloque) {
@@ -187,6 +187,13 @@ export default function PortalPaciente() {
 
   const paquetes: any[] = pacienteInfo?.paquetesPaciente ?? [];
   const citas: any[] = pacienteInfo?.citas ?? [];
+
+  const tienePaqueteActivo = paquetes.some(
+    (p) =>
+      p.estado === 'ACTIVO' &&
+      p.sesionesRestantes > 0 &&
+      (!p.fechaExpiracion || new Date(p.fechaExpiracion) >= new Date()),
+  );
 
   return (
     <div className="min-h-screen bg-axioma-50 font-sans text-axiomaText-ink antialiased selection:bg-axioma-200">
@@ -240,13 +247,34 @@ export default function PortalPaciente() {
               )}
             </div>
 
-            <button
-              onClick={() => setMostrarModalCita(true)}
-              className={`${btnOnDark} ${tamMd} self-start sm:self-auto`}
-            >
-              <Plus className="h-4 w-4" />
-              <span>Reservar nueva cita</span>
-            </button>
+            <div className="flex flex-col items-start sm:items-end gap-1.5">
+              <button
+                onClick={() => {
+                  if (usuario?.rol !== 'PACIENTE') {
+                    toast.error('Solo pacientes pueden agendar consultas desde este portal.');
+                    return;
+                  }
+                  if (!tienePaqueteActivo) {
+                    toast.error('No cuentas con paquetes activos disponibles para agendar citas. Por favor, adquiera o renueve un paquete.');
+                    return;
+                  }
+                  setMostrarModalCita(true);
+                }}
+                disabled={!tienePaqueteActivo || usuario?.rol !== 'PACIENTE'}
+                title={!tienePaqueteActivo ? 'Debes contar con un paquete activo y con sesiones disponibles para agendar citas' : 'Reservar nueva cita'}
+                className={`${btnOnDark} ${tamMd} self-start sm:self-auto disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <Plus className="h-4 w-4" />
+                <span>Reservar nueva cita</span>
+              </button>
+              {!tienePaqueteActivo && (
+                <span className="text-xs text-amber-200 font-medium">
+                  {paquetes.some((p) => p.estado === 'VENCIDO' || (p.fechaExpiracion && new Date(p.fechaExpiracion) < new Date()))
+                    ? 'Tu paquete ha expirado. Comunícate con recepción para renovar.'
+                    : 'Sin paquetes activos con saldo disponible'}
+                </span>
+              )}
+            </div>
           </div>
         </section>
 
@@ -267,26 +295,62 @@ export default function PortalPaciente() {
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {paquetes.map((p, idx) => (
-                <div
-                  key={p.id}
-                  className={`rounded-card border p-6 shadow-card transition-shadow hover:shadow-cardHover ${fondosPaquete[idx % fondosPaquete.length]}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-display text-lg font-medium tracking-heading text-axiomaText-ink">
-                        {p.paquete?.nombre || 'Paquete Terapéutico'}
-                      </h3>
-                      <p className="mt-0.5 text-xs text-axiomaText-soft">
-                        Comprado el {fechaCorta(p.fechaCompra)}
-                      </p>
+              {paquetes.map((p, idx) => {
+                const esVencido =
+                  p.estado === 'VENCIDO' ||
+                  (p.estado === 'ACTIVO' && p.fechaExpiracion && new Date(p.fechaExpiracion) < new Date());
+
+                return (
+                  <div
+                    key={p.id}
+                    className={`rounded-card border p-6 shadow-card transition-shadow hover:shadow-cardHover ${fondosPaquete[idx % fondosPaquete.length]}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-display text-lg font-medium tracking-heading text-axiomaText-ink">
+                          {p.paquete?.nombre || 'Paquete Terapéutico'}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-axiomaText-soft">
+                          Comprado el {fechaCorta(p.fechaCompra)}
+                          {p.fechaExpiracion && ` • Vence el ${fechaCorta(p.fechaExpiracion)}`}
+                        </p>
+                      </div>
+                      <span
+                        className={`${pastilla} ${
+                          esVencido
+                            ? 'bg-rose-100 text-rose-800 border border-rose-300 font-semibold'
+                            : p.estado === 'ACTIVO'
+                            ? 'bg-axioma-700 text-white'
+                            : p.estado === 'PENDIENTE_PAGO'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold'
+                            : 'bg-axioma-200 text-axioma-800'
+                        }`}
+                      >
+                        {esVencido ? 'VENCIDO' : p.estado === 'PENDIENTE_PAGO' ? 'PENDIENTE DE PAGO' : p.estado}
+                      </span>
                     </div>
-                    <span
-                      className={`${pastilla} ${p.estado === 'ACTIVO' ? 'bg-axioma-700 text-white' : 'bg-axioma-200 text-axioma-800'}`}
-                    >
-                      {p.estado}
-                    </span>
-                  </div>
+
+                    {esVencido && (
+                      <div className="mt-4 flex items-start gap-2.5 rounded-xl bg-rose-50 p-3 ring-1 ring-rose-200 text-xs text-rose-900">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+                        <div>
+                          <p className="font-semibold text-rose-950">Paquete Expirado</p>
+                          <p className="mt-0.5 text-rose-800">
+                            La vigencia de este paquete ha vencido. Por favor, adquiera o renueve un paquete para continuar sus sesiones.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {p.estado === 'PENDIENTE_PAGO' && (
+                      <div className="mt-4 flex items-start gap-2.5 rounded-xl bg-amber-50 p-3 ring-1 ring-amber-300 text-xs text-amber-900">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                        <div>
+                          <p className="font-semibold text-amber-950">Confirmación de Pago Requerida</p>
+                          <p className="mt-0.5 text-amber-800">Tu paquete está pendiente de confirmación de pago. Por favor, acércate a recepción.</p>
+                        </div>
+                      </div>
+                    )}
 
                   <div className="mt-6 flex items-baseline justify-between">
                     <div>
@@ -312,7 +376,8 @@ export default function PortalPaciente() {
                     />
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           )}
         </section>

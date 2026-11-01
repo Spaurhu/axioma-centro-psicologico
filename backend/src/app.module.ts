@@ -6,6 +6,7 @@ import { PacientesModule } from './modulos/pacientes/pacientes.module';
 import { PaquetesModule } from './modulos/paquetes/paquetes.module';
 import { CitasModule } from './modulos/citas/citas.module';
 import { MlModule } from './modulos/ml/ml.module';
+import { PagosModule } from './modulos/pagos/pagos.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -17,6 +18,7 @@ import { AppController } from './app.controller';
     PaquetesModule,
     CitasModule,
     MlModule,
+    PagosModule,
   ],
   controllers: [AppController],
 })

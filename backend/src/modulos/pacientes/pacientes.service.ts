@@ -33,6 +33,16 @@ export class PacientesService {
   }
 
   async listar(termino?: string) {
+    await this.prisma.paquetePaciente.updateMany({
+      where: {
+        estado: 'ACTIVO',
+        fechaExpiracion: { lt: new Date() },
+      },
+      data: {
+        estado: 'VENCIDO',
+      },
+    });
+
     return this.prisma.paciente.findMany({
       where: termino
         ? {
@@ -46,7 +56,7 @@ export class PacientesService {
       include: {
         paquetesPaciente: {
           include: { paquete: true },
-          where: { estado: 'ACTIVO' },
+          orderBy: { fechaCompra: 'desc' },
         },
       },
       orderBy: { apellidos: 'asc' },

@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Param, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, ForbiddenException } from '@nestjs/common';
 import { PaquetesService } from './paquetes.service';
 import { CrearPaqueteDto } from './dto/crear-paquete.dto';
 import { AsignarPaqueteDto } from './dto/asignar-paquete.dto';
+import { RegistrarPagoDto } from './dto/registrar-pago.dto';
 import { JwtAuthGuard } from '../../comun/jwt-auth.guard';
 import { RolesGuard } from '../../comun/roles.guard';
 import { Roles } from '../../comun/roles.decorator';
@@ -31,6 +32,17 @@ export class PaquetesController {
   @Post('asignar')
   async asignarAPaciente(@Body() dto: AsignarPaqueteDto) {
     return this.paquetesService.asignarAPaciente(dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Rol.ADMINISTRADOR, Rol.RECEPCIONISTA)
+  @Patch(':id/registrar-pago')
+  async registrarPago(
+    @Param('id') id: string,
+    @Body() dto: RegistrarPagoDto,
+    @UsuarioActual() user: any,
+  ) {
+    return this.paquetesService.registrarPago(id, dto.monto, dto.metodoPago, user?.id, dto.notas);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

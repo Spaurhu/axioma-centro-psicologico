@@ -16,4 +16,8 @@ export class AsignarPaqueteDto {
   @IsOptional()
   @IsString()
   metodoPago?: string;
+
+  @IsOptional()
+  @IsString()
+  psicologoId?: string;
 }

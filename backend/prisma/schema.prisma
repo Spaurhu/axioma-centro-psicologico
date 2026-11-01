@@ -36,6 +36,11 @@ enum TipoCita {
   TERAPIA         // Sesión regular de psicoterapia (RN-02, 50 min atención + 10 min transición = 60 min bloque)
 }
 
+enum ModalidadCita {
+  PRESENCIAL
+  VIRTUAL
+}
+
 enum TipoMovimientoSesion {
   CONSUMO         // Descuento por asistencia a terapia (-1)
   PENALIZACION    // Descuento por inasistencia o cancelación tardía < 24h (-1)
@@ -53,6 +58,7 @@ enum MotivoAlta {
 }
 
 enum EstadoPaquete {
+  PENDIENTE_PAGO  // Asignado al paciente pero pendiente de cobro y activación
   ACTIVO          // Con sesiones disponibles a favor
   AGOTADO         // Todas las sesiones fueron consumidas
   VENCIDO         // Expiró la vigencia del paquete (90 días)
@@ -91,6 +97,7 @@ model Usuario {
   psicologo       Psicologo?
   paciente        Paciente?
   logsAuditoria   LogAuditoria[]
+  pagosRegistrados Pago[]
 
   @@map("usuarios")
 }
@@ -122,6 +129,7 @@ model Psicologo {
   evaluaciones        HistoriaClinicaEvaluacion[]
   planesTratamiento   PlanTratamiento[]
   informesAlta        InformeAlta[]
+  paquetesPaciente    PaquetePaciente[]
 
   @@map("psicologos")
 }
@@ -235,20 +243,44 @@ model PaquetePaciente {
   id                  String             @id @default(uuid())
   pacienteId          String             @map("paciente_id")
   paqueteId           String             @map("paquete_id")
+  psicologoId         String?            @map("psicologo_id")
   paciente            Paciente           @relation(fields: [pacienteId], references: [id])
   paquete             Paquete            @relation(fields: [paqueteId], references: [id])
+  psicologo           Psicologo?         @relation(fields: [psicologoId], references: [id])
   sesionesTotales     Int                @map("sesiones_totales")
   sesionesConsumidas  Int                @default(0) @map("sesiones_consumidas")
   sesionesRestantes   Int                @map("sesiones_restantes")
-  estado              EstadoPaquete      @default(ACTIVO)
+  estado              EstadoPaquete      @default(PENDIENTE_PAGO)
   fechaCompra         DateTime           @default(now()) @map("fecha_compra") @db.Timestamptz
   fechaExpiracion     DateTime?          @map("fecha_expiracion") @db.Timestamptz
 
   citas               Cita[]
   movimientos         MovimientoSesion[]
+  pagos               Pago[]
 
   @@index([pacienteId])
+  @@index([psicologoId])
   @@map("paquetes_paciente")
+}
+
+// -------------------------------------------------------------
+// MODELO DE PAGOS (Gestión Financiera de Paquetes y Citas)
+// -------------------------------------------------------------
+
+model Pago {
+  id                String           @id @default(uuid())
+  paquetePacienteId String?          @map("paquete_paciente_id")
+  paquetePaciente   PaquetePaciente? @relation(fields: [paquetePacienteId], references: [id], onDelete: Cascade)
+  monto             Decimal          @db.Decimal(10, 2)
+  metodoPago        String           @map("metodo_pago") @db.VarChar(50) // Efectivo, Yape, Transferencia, Tarjeta
+  usuarioId         String?          @map("usuario_id")
+  usuario           Usuario?         @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  fechaPago         DateTime         @default(now()) @map("fecha_pago") @db.Timestamptz
+  notas             String?          @db.Text
+
+  @@index([paquetePacienteId])
+  @@index([usuarioId])
+  @@map("pagos")
 }
 
 // -------------------------------------------------------------
@@ -287,6 +319,8 @@ model Cita {
   paquetePaciente           PaquetePaciente?           @relation(fields: [paquetePacienteId], references: [id])
   
   tipoCita                  TipoCita                   @default(TERAPIA) @map("tipo_cita")
+  modalidad                 ModalidadCita              @default(PRESENCIAL)
+  enlaceVideo               String?                    @map("enlace_video") @db.VarChar(255)
   fechaHoraInicio           DateTime                   @map("fecha_hora_inicio") @db.Timestamptz
   fechaHoraFin              DateTime                   @map("fecha_hora_fin") @db.Timestamptz
   estado                    EstadoCita                 @default(PROGRAMADA)

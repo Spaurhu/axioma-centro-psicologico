@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import {
-  Calendar, LogOut, RefreshCw, Plus, BrainCircuit, Printer,
+  Calendar, LogOut, Video, RefreshCw, Plus, BrainCircuit, Printer,
   FileText, CheckCircle2, XCircle, CalendarClock, AlertCircle, ArrowLeft
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
@@ -216,6 +216,10 @@ export default function PortalPsicologo() {
 
   const handleGuardarNota = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (usuario?.rol !== 'PSICOLOGO' && usuario?.rol !== 'ADMINISTRADOR') {
+      toast.error('Solo los psicólogos colegiados o administradores pueden guardar notas SOAP.');
+      return;
+    }
     if (!citaSeleccionadaNota) return;
     setGuardandoNota(true);
 
@@ -793,13 +797,15 @@ export default function PortalPsicologo() {
                     >
                       Cerrar
                     </button>
-                    <button
-                      type="submit"
-                      disabled={guardandoNota}
-                      className={`${btnPrimary} ${tamMd}`}
-                    >
-                      {guardandoNota ? 'Guardando...' : 'Guardar nota SOAP'}
-                    </button>
+                    {(usuario?.rol === 'PSICOLOGO' || usuario?.rol === 'ADMINISTRADOR') && (
+                      <button
+                        type="submit"
+                        disabled={guardandoNota}
+                        className={`${btnPrimary} ${tamMd}`}
+                      >
+                        {guardandoNota ? 'Guardando...' : 'Guardar nota SOAP'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </form>

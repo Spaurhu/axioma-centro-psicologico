@@ -1,4 +1,5 @@
-import { IsDateString, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ModalidadCita } from '@prisma/client';
 
 export class CrearCitaDto {
   @IsString()
@@ -24,4 +25,8 @@ export class CrearCitaDto {
   @IsOptional()
   @IsString()
   motivoConsulta?: string;
+
+  @IsOptional()
+  @IsEnum(ModalidadCita, { message: 'La modalidad debe ser PRESENCIAL o VIRTUAL' })
+  modalidad?: ModalidadCita;
 }

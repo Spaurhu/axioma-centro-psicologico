@@ -1,9 +1,11 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MlService } from '../ml/ml.service';
+import { NotificacionesService } from '../../comun/notificaciones.service';
 import { CrearCitaDto } from './dto/crear-cita.dto';
 import { ReprogramarCitaDto } from './dto/reprogramar-cita.dto';
-import { EstadoCita, EstadoPaquete, DiaSemana, TipoCita, TipoMovimientoSesion, Rol } from '@prisma/client';
+import { EstadoCita, EstadoPaquete, DiaSemana, TipoCita, TipoMovimientoSesion, Rol, ModalidadCita } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 interface ValidarHorarioYCrucesParams {
   psicologoId: string;
@@ -18,6 +20,7 @@ export class CitasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mlService: MlService,
+    private readonly notificacionesService: NotificacionesService,
   ) {}
 
   async crear(dto: CrearCitaDto) {
@@ -70,11 +73,44 @@ export class CitasService {
       const paquete = await this.prisma.paquetePaciente.findUnique({
         where: { id: paquetePacienteId },
       });
+      if (paquete && paquete.estado === EstadoPaquete.PENDIENTE_PAGO) {
+        throw new BadRequestException(
+          'El paquete del paciente está pendiente de pago. No se pueden agendar sesiones hasta confirmar el pago',
+        );
+      }
+      if (paquete && paquete.fechaExpiracion && paquete.fechaExpiracion < new Date()) {
+        await this.prisma.paquetePaciente.update({
+          where: { id: paquete.id },
+          data: { estado: EstadoPaquete.VENCIDO },
+        });
+        throw new BadRequestException('El paquete del paciente ha expirado. Por favor, adquiera uno nuevo.');
+      }
+      if (paquete && paquete.estado === EstadoPaquete.VENCIDO) {
+        throw new BadRequestException('El paquete del paciente ha expirado. Por favor, adquiera uno nuevo.');
+      }
       if (!paquete || paquete.pacienteId !== dto.pacienteId || paquete.estado !== EstadoPaquete.ACTIVO || paquete.sesionesRestantes <= 0) {
         throw new BadRequestException('El paquete seleccionado no es válido o no cuenta con sesiones disponibles');
       }
+      if (paquete.psicologoId && paquete.psicologoId !== dto.psicologoId) {
+        throw new BadRequestException(
+          'El paquete de sesiones está vinculado al psicólogo tratante original. Para cambiar de terapeuta, solicite una transferencia de caso en recepción.',
+        );
+      }
+      if (!paquete.psicologoId) {
+        await this.prisma.paquetePaciente.update({
+          where: { id: paquete.id },
+          data: { psicologoId: dto.psicologoId },
+        });
+      }
       tienePaqueteActivo = true;
     } else {
+      const paquetePendiente = await this.prisma.paquetePaciente.findFirst({
+        where: {
+          pacienteId: dto.pacienteId,
+          estado: EstadoPaquete.PENDIENTE_PAGO,
+        },
+      });
+
       // Buscar si el paciente tiene algún paquete activo disponible
       const paqueteDisponible = await this.prisma.paquetePaciente.findFirst({
         where: {
@@ -86,8 +122,49 @@ export class CitasService {
       });
 
       if (paqueteDisponible) {
+        if (paqueteDisponible.fechaExpiracion && paqueteDisponible.fechaExpiracion < new Date()) {
+          await this.prisma.paquetePaciente.update({
+            where: { id: paqueteDisponible.id },
+            data: { estado: EstadoPaquete.VENCIDO },
+          });
+          throw new BadRequestException('El paquete del paciente ha expirado. Por favor, adquiera uno nuevo.');
+        }
+        if (paqueteDisponible.psicologoId && paqueteDisponible.psicologoId !== dto.psicologoId) {
+          throw new BadRequestException(
+            'El paquete de sesiones está vinculado al psicólogo tratante original. Para cambiar de terapeuta, solicite una transferencia de caso en recepción.',
+          );
+        }
+        if (!paqueteDisponible.psicologoId) {
+          await this.prisma.paquetePaciente.update({
+            where: { id: paqueteDisponible.id },
+            data: { psicologoId: dto.psicologoId },
+          });
+        }
         paquetePacienteId = paqueteDisponible.id;
         tienePaqueteActivo = true;
+      } else if (paquetePendiente) {
+        throw new BadRequestException(
+          'El paquete del paciente está pendiente de pago. No se pueden agendar sesiones hasta confirmar el pago',
+        );
+      } else {
+        const paqueteVencido = await this.prisma.paquetePaciente.findFirst({
+          where: {
+            pacienteId: dto.pacienteId,
+            OR: [
+              { estado: EstadoPaquete.VENCIDO },
+              { estado: EstadoPaquete.ACTIVO, fechaExpiracion: { lt: new Date() } },
+            ],
+          },
+        });
+        if (paqueteVencido) {
+          if (paqueteVencido.estado !== EstadoPaquete.VENCIDO) {
+            await this.prisma.paquetePaciente.update({
+              where: { id: paqueteVencido.id },
+              data: { estado: EstadoPaquete.VENCIDO },
+            });
+          }
+          throw new BadRequestException('El paquete del paciente ha expirado. Por favor, adquiera uno nuevo.');
+        }
       }
     }
 
@@ -111,8 +188,17 @@ export class CitasService {
     });
 
     // 6. Guardar la cita con la predicción ML
-    return this.prisma.cita.create({
+    const modalidad = dto.modalidad === ModalidadCita.VIRTUAL ? ModalidadCita.VIRTUAL : ModalidadCita.PRESENCIAL;
+    const citaId = randomUUID();
+    const enlaceVideo = modalidad === ModalidadCita.VIRTUAL
+      ? `https://meet.google.com/axioma-${citaId.slice(0, 8)}-${Date.now()}`
+      : null;
+
+    const citaCreada = await this.prisma.cita.create({
       data: {
+        id: citaId,
+        modalidad,
+        enlaceVideo,
         pacienteId: dto.pacienteId,
         psicologoId: dto.psicologoId,
         paquetePacienteId: paquetePacienteId || null,
@@ -129,6 +215,11 @@ export class CitasService {
         paquetePaciente: { include: { paquete: true } },
       },
     });
+
+    // Notificación inmediata al paciente (Consola + Telegram)
+    this.notificacionesService.enviarConfirmacion(paciente, citaCreada);
+
+    return citaCreada;
   }
 
   async listarPorFecha(fechaStr?: string, psicologoId?: string, user?: any) {
@@ -353,6 +444,19 @@ export class CitasService {
     );
 
     if (cita.paquetePacienteId && cita.paquetePaciente) {
+      if (cita.paquetePaciente.estado === EstadoPaquete.PENDIENTE_PAGO) {
+        throw new BadRequestException('El paquete del paciente está pendiente de pago. No se pueden procesar asistencias hasta confirmar el pago');
+      }
+      if (cita.paquetePaciente.fechaExpiracion && cita.paquetePaciente.fechaExpiracion < new Date()) {
+        await this.prisma.paquetePaciente.update({
+          where: { id: cita.paquetePaciente.id },
+          data: { estado: EstadoPaquete.VENCIDO },
+        });
+        throw new BadRequestException('El paquete del paciente ha expirado. Por favor, adquiera uno nuevo.');
+      }
+      if (cita.paquetePaciente.estado === EstadoPaquete.VENCIDO) {
+        throw new BadRequestException('El paquete del paciente ha expirado. Por favor, adquiera uno nuevo.');
+      }
       if (!movimientoPrevio && cita.paquetePaciente.sesionesRestantes <= 0) {
         throw new BadRequestException('El paquete de sesiones no cuenta con saldo disponible');
       }

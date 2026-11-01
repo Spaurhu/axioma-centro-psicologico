@@ -1,24 +1,44 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import {
-  Heart, Check, Calendar, Shield, BrainCircuit, Clock, Award,
+  Check, Calendar, Shield, BrainCircuit, Clock, Award,
   CheckCircle2, ChevronDown, LogOut, Phone, X, LayoutDashboard,
-  BookmarkCheck, Menu,
+  BookmarkCheck, Menu, Video, Facebook, Instagram, Linkedin, MapPin, Mail,
 } from 'lucide-react';
+import { LogoAxioma } from '@/components/logo-axioma';
 import {
-  contenedor, foco, btnPrimary, btnSecondary, btnOnDark, tamSm, tamMd, tamLg,
+  contenedor, foco, btnPrimary, btnSecondary, btnGhost, btnOnDark, tamSm, tamMd, tamLg,
 } from '@/lib/ui';
 
+/* ══════════════════════════════════════════════════════════════
+   DATOS DE PRESENTACIÓN
+   ══════════════════════════════════════════════════════════════ */
 
-/* ── Datos de presentación (solo contenido visual de la landing) ── */
+// Orden = orden en que aparecen en la página. Etiquetas cortas para que
+// quepan en una sola línea en laptop.
 const enlacesNav = [
-  { href: '#espacios', texto: 'Espacios terapéuticos' },
+  { href: '#espacios', texto: 'Espacios' },
   { href: '#innovacion', texto: 'IA predictiva' },
-  { href: '#paquetes', texto: 'Planes y sesiones' },
-  { href: '#enfoque', texto: 'Enfoque clínico' },
+  { href: '#paquetes', texto: 'Planes' },
+  { href: '#enfoque', texto: 'Enfoque' },
+  { href: '#faqs', texto: 'Preguntas' },
+];
+
+// Menú del usuario autenticado según rol (antes eran 4 bloques JSX repetidos)
+type ItemMenu = { href: string; texto: string; Icono: typeof Calendar };
+
+const menuPorRol: Record<string, ItemMenu[]> = {
+  PACIENTE: [
+    { href: '/paciente', texto: 'Mi Portal & Paquetes', Icono: BookmarkCheck },
+    { href: '/paciente', texto: 'Agendar Cita en Vivo', Icono: Calendar },
+  ],
+  PSICOLOGO: [{ href: '/psicologo', texto: 'Portal Clínico & Notas SOAP', Icono: Award }],
+  RECEPCIONISTA: [{ href: '/recepcion', texto: 'Módulo de Recepción & Citas', Icono: Calendar }],
+};
+const menuAdmin: ItemMenu[] = [
+  { href: '/panel', texto: 'Panel de Dirección Central', Icono: LayoutDashboard },
 ];
 
 type Variante = 'claro' | 'rosa' | 'suave' | 'lavanda';
@@ -69,11 +89,18 @@ const estilosSala: Record<
   },
 };
 
+/*
+  Bento responsive:
+  - móvil: 1 columna
+  - tablet (md): 2 columnas; la última card ocupa el ancho completo
+  - laptop/desktop (lg): 12 columnas → fila 1 = 7/5, fila 2 = 4/4/4
+  Las variantes se alternan para que dos cards del mismo color nunca se toquen.
+*/
 const salas = [
   {
     clave: 'agenda',
     variante: 'claro' as Variante,
-    span: 'md:col-span-7',
+    span: 'lg:col-span-7',
     Icono: Calendar,
     etiqueta: 'Agendamiento dinámico',
     titulo: 'Cero cruces de horario en tiempo real.',
@@ -84,13 +111,26 @@ const salas = [
     pieDer: 'Lunes a sábado',
   },
   {
+    clave: 'virtual',
+    variante: 'lavanda' as Variante,
+    span: 'lg:col-span-5',
+    Icono: Video,
+    etiqueta: 'Telemedicina nacional',
+    titulo: 'Sesiones virtuales por Google Meet.',
+    texto:
+      'Atención psicológica especializada desde cualquier parte del Perú. Al agendar en modalidad virtual, recibes automáticamente tu enlace protegido de Google Meet en tu correo registrado.',
+    PieIcono: Video,
+    pieIzq: 'Enlace por correo seguro',
+    pieDer: 'Cobertura nacional',
+  },
+  {
     clave: 'ia',
     id: 'innovacion',
     variante: 'rosa' as Variante,
-    span: 'md:col-span-5',
+    span: 'lg:col-span-4',
     Icono: BrainCircuit,
     etiqueta: 'Inteligencia artificial',
-    titulo: 'Predicción de inasistencias (No-Show).',
+    titulo: 'Predicción de inasistencias.',
     texto:
       'Algoritmo de regresión logística entrenado que calcula la probabilidad de asistencia del paciente según su historial y horario para activar recordatorios tempranos.',
     PieIcono: BrainCircuit,
@@ -100,19 +140,19 @@ const salas = [
   {
     clave: 'paquetes',
     variante: 'suave' as Variante,
-    span: 'md:col-span-5',
+    span: 'lg:col-span-4',
     Icono: BookmarkCheck,
     etiqueta: 'Economía terapéutica',
     titulo: 'Paquetes con deducción atómica.',
     texto:
       'Adquiere bonos de 4 u 8 sesiones con descuentos significativos. Cada vez que asistes a consulta, el sistema descuenta tu saldo de forma transparente.',
-    pieIzq: 'Desde S/. 65 por sesión en paquete',
+    pieIzq: 'Desde S/. 65 por sesión',
     pieDer: 'Ahorro hasta S/. 120',
   },
   {
     clave: 'soap',
-    variante: 'lavanda' as Variante,
-    span: 'md:col-span-7',
+    variante: 'claro' as Variante,
+    span: 'md:col-span-2 lg:col-span-4',
     Icono: Shield,
     etiqueta: 'Historial clínico SOAP',
     titulo: 'Evolución confidencial del paciente.',
@@ -211,6 +251,54 @@ const pasos = [
   },
 ];
 
+const faqs = [
+  {
+    pregunta: '¿Puedo atenderme de forma virtual?',
+    respuesta:
+      'Sí, todas nuestras terapias y evaluaciones están disponibles en modalidad virtual. Recibirás el enlace de Google Meet en tu correo al confirmar tu cita.',
+  },
+  {
+    pregunta: '¿Cómo funcionan los paquetes terapéuticos?',
+    respuesta:
+      'Puedes adquirir paquetes de 4 u 8 sesiones con descuento preferencial. Cada vez que asistes a una sesión, el sistema descuenta automáticamente tu saldo y te muestra las citas restantes en tu portal de paciente.',
+  },
+  {
+    pregunta: '¿Cómo puedo reprogramar una cita?',
+    respuesta:
+      'Puedes reprogramar tu fecha y horario directamente desde tu portal de paciente con un mínimo de 24 horas de anticipación sin costo adicional.',
+  },
+  {
+    pregunta: '¿Los psicólogos están colegiados y habilitados?',
+    respuesta:
+      'Sí, el 100% de nuestro equipo cuenta con colegiatura activa en el Colegio de Psicólogos del Perú (C.Ps.P.) y formación especializada en psicoterapia basada en evidencia.',
+  },
+];
+
+// Footer
+const enlacesRapidos = [
+  { href: '#', texto: 'Inicio' },
+  { href: '#espacios', texto: 'Espacios terapéuticos' },
+  { href: '#innovacion', texto: 'IA predictiva' },
+  { href: '#paquetes', texto: 'Planes y sesiones' },
+  { href: '#enfoque', texto: 'Enfoque clínico' },
+  { href: '#faqs', texto: 'Preguntas frecuentes' },
+];
+
+const servicios = ['Terapia individual', 'Terapia de pareja', 'Terapia infantil', 'Evaluación psicológica'];
+
+const redes = [
+  { href: 'https://facebook.com', etiqueta: 'Facebook Axioma', Icono: Facebook },
+  { href: 'https://instagram.com', etiqueta: 'Instagram Axioma', Icono: Instagram },
+  { href: 'https://linkedin.com', etiqueta: 'LinkedIn Axioma', Icono: Linkedin },
+];
+
+const enlaceFooter =
+  'rounded transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white';
+
+/* ══════════════════════════════════════════════════════════════
+   COMPONENTES LOCALES
+   ══════════════════════════════════════════════════════════════ */
+
 function EncabezadoSeccion({ titulo, texto }: { titulo: string; texto: string }) {
   return (
     <div className="mb-10 grid gap-4 lg:mb-14 lg:grid-cols-2 lg:items-end lg:gap-12">
@@ -224,11 +312,16 @@ function EncabezadoSeccion({ titulo, texto }: { titulo: string; texto: string })
   );
 }
 
+/* ══════════════════════════════════════════════════════════════
+   PÁGINA
+   ══════════════════════════════════════════════════════════════ */
+
 export default function PaginaPrincipal() {
   const [usuario, setUsuario] = useState<any>(null);
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [navMovil, setNavMovil] = useState(false);
   const [mostrarNotificacion, setMostrarNotificacion] = useState(true);
+  const [faqAbierta, setFaqAbierta] = useState<number | null>(0);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -273,42 +366,24 @@ export default function PaginaPrincipal() {
 
   const esPaciente = usuario?.rol === 'PACIENTE';
   const destinoCta = usuario ? '/paciente' : '/registro';
+  const itemsMenu: ItemMenu[] = menuPorRol[usuario?.rol] ?? menuAdmin;
 
   return (
     <div className="flex min-h-screen flex-col bg-axioma-50 font-sans text-axiomaText-ink antialiased selection:bg-axioma-200 selection:text-axiomaText-ink">
 
-      {/* 1. NAVBAR */}
+      {/* 1. NAVBAR — nav completa desde lg; por debajo, menú hamburguesa */}
       <header className="sticky top-0 z-50 border-b border-axioma-200/80 bg-axioma-50/90 backdrop-blur-md">
-        <div className={`${contenedor} flex items-center justify-between py-3.5 lg:py-4`}>
+        <div className={`${contenedor} flex items-center justify-between gap-4 py-3.5 lg:py-4`}>
 
-          {/* Logo */}
-          <Link href="/" className={`group flex items-center space-x-3 rounded-card-sm ${foco}`}>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center transition-transform group-hover:scale-105">
-              <Image
-                src="/icono-axioma.jpg"
-                alt="Cerebro Axioma"
-                width={44}
-                height={44}
-                className="object-contain"
-              />
-            </div>
-            <div className="border-l-[1.5px] border-axiomaText-muted/30 pl-3">
-              <span className="block text-2xl font-extrabold lowercase leading-none tracking-tight text-axioma-600">
-                axioma
-              </span>
-              <span className="mt-1 block text-[11px] font-bold uppercase leading-tight tracking-wider text-axiomaText">
-                Centro<br />Psicológico
-              </span>
-            </div>
-          </Link>
+          <LogoAxioma subtitulo={<>Centro<br />Psicológico</>} />
 
-          {/* Links navegación (desktop) */}
-          <nav className="hidden items-center gap-1 md:flex" aria-label="Secciones">
+          {/* Links navegación (laptop y desktop) */}
+          <nav className="hidden items-center gap-1 lg:flex" aria-label="Secciones">
             {enlacesNav.map((e) => (
               <a
                 key={e.href}
                 href={e.href}
-                className={`rounded-button px-4 py-2 text-sm font-medium text-axiomaText-soft transition-colors hover:bg-axioma-100 hover:text-axioma-700 ${foco}`}
+                className={`rounded-button px-3.5 py-2 text-sm font-medium text-axiomaText-soft transition-colors hover:bg-axioma-100 hover:text-axioma-700 xl:px-4 ${foco}`}
               >
                 {e.texto}
               </a>
@@ -351,53 +426,17 @@ export default function PaginaPrincipal() {
                     </div>
 
                     <div className="py-1.5">
-                      {usuario.rol === 'PACIENTE' ? (
-                        <>
-                          <Link
-                            href="/paciente"
-                            onClick={() => setMenuAbierto(false)}
-                            className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
-                          >
-                            <BookmarkCheck className="h-4 w-4 text-axioma-500" />
-                            <span>Mi Portal & Paquetes</span>
-                          </Link>
-                          <Link
-                            href="/paciente"
-                            onClick={() => setMenuAbierto(false)}
-                            className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
-                          >
-                            <Calendar className="h-4 w-4 text-axioma-500" />
-                            <span>Agendar Cita en Vivo</span>
-                          </Link>
-                        </>
-                      ) : usuario.rol === 'PSICOLOGO' ? (
+                      {itemsMenu.map(({ href, texto, Icono }) => (
                         <Link
-                          href="/psicologo"
+                          key={texto}
+                          href={href}
                           onClick={() => setMenuAbierto(false)}
                           className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
                         >
-                          <Award className="h-4 w-4 text-axioma-500" />
-                          <span>Portal Clínico & Notas SOAP</span>
+                          <Icono className="h-4 w-4 text-axioma-500" />
+                          <span>{texto}</span>
                         </Link>
-                      ) : usuario.rol === 'RECEPCIONISTA' ? (
-                        <Link
-                          href="/recepcion"
-                          onClick={() => setMenuAbierto(false)}
-                          className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
-                        >
-                          <Calendar className="h-4 w-4 text-axioma-500" />
-                          <span>Módulo de Recepción & Citas</span>
-                        </Link>
-                      ) : (
-                        <Link
-                          href="/panel"
-                          onClick={() => setMenuAbierto(false)}
-                          className="flex items-center space-x-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-axiomaText-soft transition hover:bg-axioma-50 hover:text-axioma-700"
-                        >
-                          <LayoutDashboard className="h-4 w-4 text-axioma-500" />
-                          <span>Panel de Dirección Central</span>
-                        </Link>
-                      )}
+                      ))}
                     </div>
 
                     <div className="border-t border-axioma-100 pt-1.5">
@@ -424,10 +463,10 @@ export default function PaginaPrincipal() {
               </>
             )}
 
-            {/* Botón menú móvil */}
+            {/* Botón menú móvil / tablet */}
             <button
               onClick={() => setNavMovil(!navMovil)}
-              className={`flex h-10 w-10 items-center justify-center rounded-full border border-axioma-200 bg-white text-axioma-700 transition hover:bg-axioma-100 md:hidden ${foco}`}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border border-axioma-200 bg-white text-axioma-700 transition hover:bg-axioma-100 lg:hidden ${foco}`}
               aria-label={navMovil ? 'Cerrar menú' : 'Abrir menú'}
               aria-expanded={navMovil}
             >
@@ -436,10 +475,10 @@ export default function PaginaPrincipal() {
           </div>
         </div>
 
-        {/* Navegación móvil */}
+        {/* Navegación móvil / tablet */}
         {navMovil && (
-          <nav className="animate-fade-in border-t border-axioma-200 bg-axioma-50 px-6 py-4 motion-reduce:animate-none md:hidden" aria-label="Secciones">
-            <div className="flex flex-col gap-1">
+          <nav className="animate-fade-in border-t border-axioma-200 bg-axioma-50 px-6 py-4 motion-reduce:animate-none lg:hidden" aria-label="Secciones">
+            <div className="grid gap-1 sm:grid-cols-2">
               {enlacesNav.map((e) => (
                 <a
                   key={e.href}
@@ -470,9 +509,9 @@ export default function PaginaPrincipal() {
 
           {/* Lado izquierdo */}
           <div className="space-y-6 lg:col-span-7">
-            <div className="inline-flex items-center gap-2 rounded-tag border border-axioma-200 bg-white/80 px-4 py-1.5 text-xs font-semibold text-axioma-700">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-axioma-500 motion-reduce:animate-none" />
-              <span>Salud mental basada en evidencia, con psicólogos colegiados C.Ps.P.</span>
+            <div className="inline-flex items-center gap-2 rounded-tag border border-axioma-300 bg-axioma-100/90 px-3.5 py-1.5 text-xs font-bold text-axioma-800">
+              <Video className="h-3.5 w-3.5" />
+              <span>Nueva modalidad: terapia presencial y virtual</span>
             </div>
 
             <h1 className="font-display text-4xl font-medium leading-[1.08] tracking-display text-axiomaText-ink sm:text-5xl lg:text-6xl">
@@ -484,7 +523,7 @@ export default function PaginaPrincipal() {
             </p>
 
             {/* Botones */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
+            <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:flex-wrap sm:items-center">
               <Link href={esPaciente ? '/paciente' : '/registro'} className={`${btnPrimary} ${tamLg}`}>
                 {esPaciente ? 'Ir a Mi Portal de Citas' : 'Agendar Mi Primera Sesión'}
               </Link>
@@ -573,7 +612,7 @@ export default function PaginaPrincipal() {
         </div>
       </section>
 
-      {/* 3. BANDA DE RESPALDO (burdeos: contraste y peso visual) */}
+      {/* 3. BANDA DE RESPALDO */}
       <section className="bg-axioma-900 text-white">
         <div className={`${contenedor} flex flex-col gap-5 py-6 lg:flex-row lg:items-center lg:justify-between`}>
           <p className="max-w-[16rem] text-sm font-medium leading-snug text-axioma-200">
@@ -596,7 +635,7 @@ export default function PaginaPrincipal() {
         </div>
       </section>
 
-      {/* 4. ESPACIOS (bento asimétrico sobre lavanda) */}
+      {/* 4. ESPACIOS (bento responsive sobre lavanda) */}
       <section id="espacios" className="scroll-mt-20 bg-heather-soft">
         <div className={`${contenedor} py-16 lg:py-20`}>
           <EncabezadoSeccion
@@ -604,7 +643,7 @@ export default function PaginaPrincipal() {
             texto="Cada módulo de nuestra plataforma está pensado con calidez y rigor clínico para eliminar la fricción entre tú y tu terapeuta."
           />
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-12">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-12">
             {salas.map((s) => {
               const e = estilosSala[s.variante];
               const PieIcono = s.PieIcono;
@@ -612,23 +651,23 @@ export default function PaginaPrincipal() {
                 <article
                   key={s.clave}
                   id={s.id}
-                  className={`flex scroll-mt-24 flex-col rounded-card border p-7 shadow-card sm:p-9 ${s.span} ${e.card}`}
+                  className={`flex scroll-mt-24 flex-col rounded-card border p-6 shadow-card sm:p-8 ${s.span} ${e.card}`}
                 >
-                  <div className="mb-6 flex items-center gap-3">
-                    <span className={`flex h-11 w-11 items-center justify-center rounded-xl ${e.icono}`}>
+                  <div className="mb-5 flex flex-wrap items-center gap-3">
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${e.icono}`}>
                       <s.Icono className="h-5 w-5" />
                     </span>
                     <span className={`rounded-tag border px-3 py-1 text-xs font-semibold ${e.pastilla}`}>
                       {s.etiqueta}
                     </span>
                   </div>
-                  <h3 className={`mb-3 font-display text-2xl font-medium leading-tight tracking-heading sm:text-[28px] ${e.titulo}`}>
+                  <h3 className={`mb-3 font-display text-2xl font-medium leading-tight tracking-heading ${e.titulo}`}>
                     {s.titulo}
                   </h3>
-                  <p className={`mb-7 text-base leading-relaxed ${e.texto}`}>{s.texto}</p>
-                  <div className={`mt-auto flex flex-wrap items-center justify-between gap-2 rounded-card-sm border p-4 text-xs font-semibold ${e.pie}`}>
+                  <p className={`mb-6 text-base leading-relaxed ${e.texto}`}>{s.texto}</p>
+                  <div className={`mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-card-sm border p-4 text-xs font-semibold ${e.pie}`}>
                     <span className="flex items-center gap-2">
-                      {PieIcono && <PieIcono className={`h-4 w-4 ${e.icoPie}`} />}
+                      {PieIcono && <PieIcono className={`h-4 w-4 shrink-0 ${e.icoPie}`} />}
                       {s.pieIzq}
                     </span>
                     <span className={e.pieSec}>{s.pieDer}</span>
@@ -648,7 +687,7 @@ export default function PaginaPrincipal() {
             texto="Elige la modalidad que mejor se adapte a tus objetivos terapéuticos. Mientras más sesiones, menor el costo por sesión."
           />
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 md:items-stretch">
+          <div className="grid grid-cols-1 gap-6 pt-3 md:grid-cols-3 md:items-stretch md:pt-0">
             {paquetes.map((p) => (
               <div
                 key={p.clave}
@@ -674,11 +713,11 @@ export default function PaginaPrincipal() {
                     {p.descripcion}
                   </p>
 
-                  <div className="mt-6 flex items-baseline">
+                  <div className="mt-6 flex flex-wrap items-baseline gap-x-2">
                     <span className={`text-4xl font-bold tracking-heading ${p.destacado ? 'text-white' : 'text-axiomaText-ink'}`}>
                       {p.precio}
                     </span>
-                    <span className={`ml-2 text-xs ${p.destacado ? 'text-axioma-200' : 'text-axiomaText-soft'}`}>
+                    <span className={`text-xs ${p.destacado ? 'text-axioma-200' : 'text-axiomaText-soft'}`}>
                       {p.detalle}
                     </span>
                   </div>
@@ -774,30 +813,177 @@ export default function PaginaPrincipal() {
         </div>
       </section>
 
-      {/* 7. FOOTER */}
-      <footer className="mt-auto bg-axioma-950 text-white">
-        <div className={`${contenedor} flex flex-col items-center justify-between gap-6 py-10 md:flex-row`}>
-          <div className="flex items-center space-x-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-axioma-300">
-              <Heart className="h-5 w-5 fill-axioma-300" />
-            </div>
-            <div>
-              <p className="text-base font-bold text-white">Centro Psicológico Axioma</p>
-              <p className="text-xs text-axioma-200">
-                Universidad Tecnológica del Perú · Curso Integrador II
+      {/* 7. PREGUNTAS FRECUENTES — título a la izquierda, acordeón a la derecha */}
+      <section id="faqs" className="scroll-mt-20 border-t border-axioma-200 bg-heather-soft">
+        <div className={`${contenedor} grid gap-10 py-16 lg:grid-cols-12 lg:gap-14 lg:py-20`}>
+
+          <div className="lg:col-span-5">
+            <div className="lg:sticky lg:top-28">
+              <h2 className="font-display text-3xl font-medium leading-[1.12] tracking-heading text-axiomaText-ink sm:text-4xl">
+                Preguntas frecuentes sobre la atención.
+              </h2>
+              <p className="mt-4 max-w-md text-base leading-relaxed text-axiomaText-soft">
+                Resolvemos tus dudas sobre modalidades presencial y virtual, paquetes terapéuticos y agendamiento.
               </p>
+
+              <div className="mt-8 rounded-card-sm border border-axioma-200 bg-white p-5 shadow-card">
+                <p className="text-sm font-semibold text-axiomaText-ink">¿No encuentras tu respuesta?</p>
+                <p className="mt-1 text-sm leading-relaxed text-axiomaText-soft">
+                  Escríbenos o llámanos y te ayudamos a elegir la modalidad que mejor se adapte a ti.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <a href="mailto:contacto@axioma.pe" className={`${btnSecondary} ${tamSm}`}>
+                    <Mail className="h-4 w-4" />
+                    <span>Escribir</span>
+                  </a>
+                  <a href="tel:+5114567890" className={`${btnGhost} ${tamSm}`}>
+                    <Phone className="h-4 w-4" />
+                    <span>(01) 456-7890</span>
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-axioma-200">
-            <Link href="/login" className="transition hover:text-white">Acceso Personal Médico</Link>
-            <Link href="/registro" className="transition hover:text-white">Portal Pacientes</Link>
-            <span>© 2026 Axioma. Todos los derechos reservados.</span>
+          <div className="space-y-3 lg:col-span-7">
+            {faqs.map((faq, index) => {
+              const estaAbierta = faqAbierta === index;
+              return (
+                <div
+                  key={faq.pregunta}
+                  className={`overflow-hidden rounded-card-sm border bg-white transition-colors ${estaAbierta ? 'border-axioma-300 shadow-card' : 'border-axioma-200 hover:border-axioma-300'
+                    }`}
+                >
+                  <h3>
+                    <button
+                      type="button"
+                      id={`faq-boton-${index}`}
+                      aria-controls={`faq-panel-${index}`}
+                      aria-expanded={estaAbierta}
+                      onClick={() => setFaqAbierta(estaAbierta ? null : index)}
+                      className="flex w-full items-center justify-between gap-4 p-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-axioma-600"
+                    >
+                      <span className="font-display text-base font-medium text-axiomaText-ink sm:text-lg">
+                        {faq.pregunta}
+                      </span>
+                      <ChevronDown
+                        className={`h-5 w-5 shrink-0 text-axioma-600 transition-transform duration-200 ${estaAbierta ? 'rotate-180' : ''
+                          }`}
+                      />
+                    </button>
+                  </h3>
+                  {estaAbierta && (
+                    <div
+                      id={`faq-panel-${index}`}
+                      role="region"
+                      aria-labelledby={`faq-boton-${index}`}
+                      className="border-t border-axioma-100 px-5 py-4 text-sm leading-relaxed text-axiomaText-soft"
+                    >
+                      {faq.respuesta}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* 8. FOOTER */}
+      <footer className="mt-auto bg-axioma-950 text-white">
+        <div className={`${contenedor} py-12 lg:py-16`}>
+          <div className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-12 lg:gap-8">
+
+            {/* Marca y redes */}
+            <div className="space-y-4 md:col-span-2 lg:col-span-4">
+              <LogoAxioma oscuro />
+              <p className="max-w-sm text-sm leading-relaxed text-axioma-200">
+                Centro de salud mental especializado en psicoterapia basada en evidencia con atención presencial y virtual en todo el Perú. Cuidado clínico confidencial, ético y humano.
+              </p>
+              <div className="flex items-center gap-3 pt-1">
+                {redes.map(({ href, etiqueta, Icono }) => (
+                  <a
+                    key={etiqueta}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={etiqueta}
+                    className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-axioma-200 transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  >
+                    <Icono className="h-4 w-4" />
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* Enlaces y servicios: en móvil van lado a lado */}
+            <div className="grid grid-cols-2 gap-8 lg:col-span-5 lg:grid-cols-5">
+              <div className="lg:col-span-2">
+                <h3 className="text-sm font-semibold text-white">Enlaces rápidos</h3>
+                <ul className="mt-4 space-y-2.5 text-sm text-axioma-200">
+                  {enlacesRapidos.map((e) => (
+                    <li key={e.texto}>
+                      <a href={e.href} className={enlaceFooter}>{e.texto}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="lg:col-span-3">
+                <h3 className="text-sm font-semibold text-white">Servicios</h3>
+                <ul className="mt-4 space-y-2.5 text-sm text-axioma-200">
+                  {servicios.map((s) => (
+                    <li key={s} className="flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-axioma-400" />
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                  <li className="flex items-center gap-2 font-semibold text-white">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+                    <span>Telemedicina (sesión virtual)</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Contacto */}
+            <div className="lg:col-span-3">
+              <h3 className="text-sm font-semibold text-white">Contacto</h3>
+              <ul className="mt-4 space-y-3 text-sm text-axioma-200">
+                <li className="flex items-start gap-2.5">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-axioma-400" />
+                  <span>Av. Arequipa 2450, Lince, Lima</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <Phone className="h-4 w-4 shrink-0 text-axioma-400" />
+                  <a href="tel:+5114567890" className={enlaceFooter}>(01) 456-7890</a>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <Mail className="h-4 w-4 shrink-0 text-axioma-400" />
+                  <a href="mailto:contacto@axioma.pe" className={enlaceFooter}>contacto@axioma.pe</a>
+                </li>
+              </ul>
+              <Link
+                href="/login"
+                className={`${enlaceFooter} mt-5 inline-block text-xs text-axioma-300 underline underline-offset-4`}
+              >
+                Acceso Personal Médico
+              </Link>
+            </div>
+          </div>
+
+          {/* Línea legal */}
+          <div className="mt-10 flex flex-col gap-3 border-t border-white/10 pt-6 text-xs text-axioma-300 lg:mt-12 lg:flex-row lg:items-center lg:justify-between">
+            <p>© 2026 Centro Psicológico Axioma. Todos los derechos reservados.</p>
+            <p className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:gap-x-5">
+              <span>Ley N° 26842 - Ley General de Salud</span>
+              <span>Ley N° 29733 - Protección de Datos Personales</span>
+            </p>
           </div>
         </div>
       </footer>
 
-      {/* 8. NOTIFICACIÓN FLOTANTE */}
+      {/* 9. NOTIFICACIÓN FLOTANTE */}
       {mostrarNotificacion && (
         <div className="fixed bottom-4 left-4 right-4 z-40 animate-fade-in rounded-card-sm border border-axioma-200 bg-white p-4 text-axiomaText-ink shadow-lift motion-reduce:animate-none sm:bottom-6 sm:left-auto sm:right-6 sm:max-w-[340px]">
           <div className="flex items-start justify-between">
