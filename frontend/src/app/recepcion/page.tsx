@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Users, Calendar, Video, List, CalendarDays, ChevronLeft, ChevronRight, PackageCheck, Plus, LogOut,
-  RefreshCw, Search, Clock, CheckCircle2, XCircle, CalendarClock, CreditCard, X
+  RefreshCw, Search, Clock, CheckCircle2, XCircle, CalendarClock, CreditCard, X, Bell
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { LogoAxioma } from '@/components/logo-axioma';
@@ -68,6 +68,8 @@ export default function PanelRecepcion() {
   const [mostrarModalCita, setMostrarModalCita] = useState(false);
   const [mostrarModalReprogramar, setMostrarModalReprogramar] = useState(false);
   const [citaSeleccionadaParaReprog, setCitaSeleccionadaParaReprog] = useState<any>(null);
+  const [citaParaRecordatorio, setCitaParaRecordatorio] = useState<any>(null);
+  const [enviandoRecordatorio, setEnviandoRecordatorio] = useState(false);
 
   const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
   const [mostrarModalEditarPaciente, setMostrarModalEditarPaciente] = useState(false);
@@ -261,6 +263,22 @@ export default function PanelRecepcion() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al cancelar cita');
+    }
+  };
+
+  const handleEnviarRecordatorio = async () => {
+    if (!citaParaRecordatorio) return;
+    setEnviandoRecordatorio(true);
+    try {
+      await apiFetch(`/citas/${citaParaRecordatorio.id}/recordatorio`, {
+        method: 'POST',
+      });
+      toast.success('Recordatorio de confirmación enviado al paciente.');
+      setCitaParaRecordatorio(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Error al enviar recordatorio');
+    } finally {
+      setEnviandoRecordatorio(false);
     }
   };
 
@@ -751,7 +769,18 @@ export default function PanelRecepcion() {
                               <span className={`${pastilla} ${claseEstadoCita(c.estado)}`}>{c.estado}</span>
                             </td>
                             <td className={`${tdClase} text-right`}>
-                              <div className="flex items-center justify-end gap-1.5">
+                              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                {c.nivelRiesgoInasistencia === 'ALTO' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setCitaParaRecordatorio(c)}
+                                    title="Alto riesgo de inasistencia: enviar recordatorio manual"
+                                    className="inline-flex items-center gap-1 rounded-button border border-amber-300 bg-amber-100 px-2.5 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-200/80"
+                                  >
+                                    <Bell className="h-3.5 w-3.5" />
+                                    <span>Recordar</span>
+                                  </button>
+                                )}
                                 {c.estado === 'PROGRAMADA' && (
                                   <>
                                     <button
@@ -1848,6 +1877,42 @@ export default function PanelRecepcion() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: RECORDATORIO MANUAL (RIESGO ALTO DE NO-SHOW) */}
+      {citaParaRecordatorio && (
+        <div className={modalOverlay}>
+          <div className={modalWrap}>
+            <div className={`${modalCard} max-w-md`} role="dialog" aria-modal="true">
+              <h3 className="font-display text-xl font-medium tracking-heading text-axiomaText-ink">
+                Confirmación de asistencia (Riesgo Alto)
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-axiomaText-body">
+                El sistema ha detectado un alto riesgo de inasistencia. ¿Deseas enviar un recordatorio manual?
+              </p>
+              <div className="mt-3 rounded-card-sm border border-axioma-100 bg-axioma-50 p-3 text-xs text-axiomaText-soft">
+                Paciente: <strong className="text-axiomaText-ink">{citaParaRecordatorio.paciente?.nombres} {citaParaRecordatorio.paciente?.apellidos}</strong> ({fechaCorta(citaParaRecordatorio.fechaHoraInicio)} - {horaCorta(citaParaRecordatorio.fechaHoraInicio)})
+              </div>
+              <div className="mt-5 flex justify-end gap-2 border-t border-axioma-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setCitaParaRecordatorio(null)}
+                  className={`${btnSecondary} ${tamMd}`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={enviandoRecordatorio}
+                  onClick={handleEnviarRecordatorio}
+                  className={`${btnPrimary} ${tamMd}`}
+                >
+                  {enviandoRecordatorio ? 'Enviando...' : 'Enviar recordatorio'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -217,6 +217,132 @@ export class NotificacionesService {
     }
   }
 
+  async enviarConfirmacionObligatoria(paciente: any, cita: any) {
+    const inicio = new Date(cita.fechaHoraInicio);
+    const fin = new Date(cita.fechaHoraFin);
+
+    const fechaFormateada = inicio.toLocaleDateString('es-PE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: 'America/Lima',
+    });
+    const fechaCapitalizada = fechaFormateada.charAt(0).toUpperCase() + fechaFormateada.slice(1);
+
+    const horaInicio = inicio.toLocaleTimeString('es-PE', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'America/Lima',
+    });
+
+    const horaFin = fin.toLocaleTimeString('es-PE', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'America/Lima',
+    });
+
+    const nombresPsicologo = cita.psicologo
+      ? `${cita.psicologo.nombres} ${cita.psicologo.apellidos || ''}`.trim()
+      : 'Terapeuta Asignado';
+    const nombresPaciente = `${paciente?.nombres || 'Paciente'} ${paciente?.apellidos || ''}`.trim();
+    const correoDestino = paciente?.correo || paciente?.usuario?.correo;
+    const urlConfirmacion = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/paciente?confirmarCita=${cita.id}`;
+
+    console.log(
+      `[ALERTA ML NO-SHOW ALTO - CONFIRMACIÓN OBLIGATORIA] Paciente: ${nombresPaciente} | Correo: ${correoDestino || 'N/A'} | Cita: ${fechaCapitalizada} (${horaInicio})`,
+    );
+
+    if (!correoDestino) {
+      this.logger.warn(
+        `El paciente ${nombresPaciente} no tiene correo registrado. Confirmación obligatoria omitida.`,
+      );
+      return;
+    }
+
+    const htmlContenido = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; }
+          .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08); border: 1px solid #fde68a; }
+          .header { background-color: #8b3d53; color: #ffffff; padding: 26px 24px; text-align: center; border-bottom: 3px solid #d97706; }
+          .header h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; }
+          .header p { margin: 6px 0 0; font-size: 13px; opacity: 0.92; }
+          .content { padding: 30px 28px; }
+          .alert-box { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 18px; margin: 18px 0; color: #92400e; font-size: 14px; line-height: 1.6; }
+          .card-details { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px; margin: 20px 0; font-size: 13px; }
+          .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
+          .detail-row:last-child { border-bottom: none; }
+          .cta-wrap { text-align: center; margin: 26px 0; }
+          .cta-btn { background-color: #8b3d53; color: #ffffff !important; padding: 13px 28px; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-block; }
+          .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Confirmación de Asistencia Requerida</h1>
+            <p>Centro Psicológico Axioma</p>
+          </div>
+          <div class="content">
+            <p style="font-size: 15px; color: #0f172a;">Estimado(a) <strong>${nombresPaciente}</strong>,</p>
+            <div class="alert-box">
+              Hemos notado que tu cita está próxima. Por favor, confirma tu asistencia haciendo clic en el siguiente botón. Si no puedes asistir, reprograma tu cita con 24 horas de anticipación.
+            </div>
+            <div class="card-details">
+              <div class="detail-row">
+                <span><strong>Fecha:</strong></span>
+                <span>${fechaCapitalizada}</span>
+              </div>
+              <div class="detail-row">
+                <span><strong>Horario:</strong></span>
+                <span>${horaInicio} - ${horaFin}</span>
+              </div>
+              <div class="detail-row">
+                <span><strong>Terapeuta:</strong></span>
+                <span>${nombresPsicologo}</span>
+              </div>
+            </div>
+            <div class="cta-wrap">
+              <a href="${urlConfirmacion}" target="_blank" class="cta-btn">
+                Confirmar Asistencia
+              </a>
+            </div>
+          </div>
+          <div class="footer">
+            Centro Psicológico Axioma • Av. Arequipa 2450, Lince, Lima • Tel: (01) 456-7890
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const transporter = this.obtenerTransporter();
+    if (!transporter) {
+      console.log(
+        `[SIMULACIÓN CORREO CONFIRMACIÓN OBLIGATORIA] Correo preparado para ${correoDestino} (Asunto: "⚠️ Confirma tu asistencia a tu cita del ${fechaCapitalizada}").`,
+      );
+      return;
+    }
+
+    try {
+      const info = await transporter.sendMail({
+        from: `"Centro Psicológico Axioma" <${process.env.EMAIL_USER}>`,
+        to: correoDestino,
+        subject: `⚠️ Confirma tu asistencia a tu cita del ${fechaCapitalizada}`,
+        html: htmlContenido,
+      });
+      this.logger.log(`[CORREO CONFIRMACIÓN OBLIGATORIA ENVIADO] Destino: ${correoDestino}. ID: ${info.messageId}`);
+    } catch (error: any) {
+      this.logger.error(`[ERROR CORREO CONFIRMACIÓN OBLIGATORIA] ${error.message}`);
+    }
+  }
+
   // Alias retrocompatible
   async enviarConfirmacionWhatsApp(paciente: any, cita: any) {
     return this.enviarConfirmacion(paciente, cita);

@@ -4,7 +4,7 @@ import { MlService } from '../ml/ml.service';
 import { NotificacionesService } from '../../comun/notificaciones.service';
 import { CrearCitaDto } from './dto/crear-cita.dto';
 import { ReprogramarCitaDto } from './dto/reprogramar-cita.dto';
-import { EstadoCita, EstadoPaquete, DiaSemana, TipoCita, TipoMovimientoSesion, Rol, ModalidadCita } from '@prisma/client';
+import { EstadoCita, EstadoPaquete, DiaSemana, TipoCita, TipoMovimientoSesion, Rol, ModalidadCita, NivelRiesgo } from '@prisma/client';
 import { randomUUID } from 'crypto';
 
 interface ValidarHorarioYCrucesParams {
@@ -219,7 +219,37 @@ export class CitasService {
     // Notificación inmediata al paciente (Consola + Telegram)
     this.notificacionesService.enviarConfirmacion(paciente, citaCreada);
 
+    // Acción automática ML: Si el riesgo de inasistencia es ALTO (o probabilidad > 0.60), enviar correo de confirmación obligatoria
+    if (
+      prediccionMl.nivelRiesgo === NivelRiesgo.ALTO ||
+      Number(prediccionMl.probabilidad) > 0.6
+    ) {
+      this.notificacionesService.enviarConfirmacionObligatoria(paciente, citaCreada);
+    }
+
     return citaCreada;
+  }
+
+  async enviarRecordatorioManual(id: string) {
+    const cita = await this.prisma.cita.findUnique({
+      where: { id },
+      include: {
+        paciente: true,
+        psicologo: true,
+        paquetePaciente: { include: { paquete: true } },
+      },
+    });
+
+    if (!cita) {
+      throw new NotFoundException('Cita no encontrada');
+    }
+
+    await this.notificacionesService.enviarConfirmacionObligatoria(cita.paciente, cita);
+
+    return {
+      mensaje: 'Recordatorio de confirmación obligatoria enviado exitosamente.',
+      citaId: cita.id,
+    };
   }
 
   async listarPorFecha(fechaStr?: string, psicologoId?: string, user?: any) {

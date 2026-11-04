@@ -854,10 +854,12 @@ export default function PanelStaff() {
       ? [
           {
             etiqueta: 'Ingresos del Mes',
-            valor: `S/. ${ingresosMes.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            prefijo: 'S/.',
+            valor: ingresosMes.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            esMoneda: true,
             nota: `${conteoPagosMes} cobro(s)`,
             fondo: 'bg-emerald-50 border-emerald-200',
-            notaClase: 'text-emerald-700 font-bold',
+            notaClase: 'text-emerald-700/80 font-medium',
             Icono: Banknote,
             iconoClase: 'text-emerald-600',
           },
@@ -994,17 +996,42 @@ export default function PanelStaff() {
           {/* Métricas */}
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {metricas.map((m: any) => (
-              <div key={m.etiqueta} className={`rounded-card border p-5 shadow-card ${m.fondo}`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-axiomaText-soft">{m.etiqueta}</span>
-                  {m.Icono && <m.Icono className={`h-4 w-4 ${m.iconoClase || 'text-axiomaText-soft'}`} />}
+              <div
+                key={m.etiqueta}
+                className={`flex h-full flex-col justify-between overflow-hidden rounded-card border p-5 shadow-card ${m.fondo}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-medium text-axiomaText-soft">{m.etiqueta}</span>
+                  {m.Icono && <m.Icono className={`h-4 w-4 shrink-0 ${m.iconoClase || 'text-axiomaText-soft'}`} />}
                 </div>
-                <div className="mt-2 flex items-baseline justify-between gap-2">
-                  <span className="font-display text-3xl font-medium tracking-heading text-axiomaText-ink">
-                    {m.valor}
-                  </span>
-                  <span className={`text-xs font-semibold ${m.notaClase}`}>{m.nota}</span>
-                </div>
+
+                {m.esMoneda ? (
+                  <div className="mt-2 min-w-0">
+                    <div
+                      className="flex min-w-0 items-baseline gap-1.5"
+                      title={`${m.prefijo} ${m.valor}`}
+                    >
+                      <span className="shrink-0 text-sm font-semibold text-axiomaText-soft">
+                        {m.prefijo}
+                      </span>
+                      <span className="truncate font-display text-[clamp(1.5rem,2.2vw,1.875rem)] font-bold leading-tight tracking-heading tabular-nums text-axiomaText-ink">
+                        {m.valor}
+                      </span>
+                    </div>
+                    <p className={`mt-1 truncate text-xs ${m.notaClase}`}>
+                      {m.nota}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-2 min-w-0">
+                    <div className="truncate font-display text-3xl font-bold leading-tight tracking-heading tabular-nums text-axiomaText-ink">
+                      {m.valor}
+                    </div>
+                    <p className={`mt-1 truncate text-xs font-semibold ${m.notaClase}`}>
+                      {m.nota}
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

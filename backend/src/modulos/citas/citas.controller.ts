@@ -72,6 +72,12 @@ export class CitasController {
     return this.citasService.marcarNoAsistio(id, user?.id);
   }
 
+  @Roles(Rol.ADMINISTRADOR, Rol.RECEPCIONISTA, Rol.PSICOLOGO)
+  @Post(':id/recordatorio')
+  async enviarRecordatorio(@Param('id') id: string) {
+    return this.citasService.enviarRecordatorioManual(id);
+  }
+
   @Roles(Rol.ADMINISTRADOR)
   @Post(':id/revertir')
   async revertirCita(@Param('id') id: string, @UsuarioActual() user: any) {
