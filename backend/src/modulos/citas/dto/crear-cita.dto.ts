@@ -1,5 +1,5 @@
 import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { ModalidadCita } from '@prisma/client';
+import { ModalidadCita, TipoCita } from '@prisma/client';
 
 export class CrearCitaDto {
   @IsString()
@@ -29,4 +29,8 @@ export class CrearCitaDto {
   @IsOptional()
   @IsEnum(ModalidadCita, { message: 'La modalidad debe ser PRESENCIAL o VIRTUAL' })
   modalidad?: ModalidadCita;
+
+  @IsOptional()
+  @IsEnum(TipoCita, { message: 'El tipo de cita debe ser EVALUACION o TERAPIA' })
+  tipoCita?: TipoCita;
 }

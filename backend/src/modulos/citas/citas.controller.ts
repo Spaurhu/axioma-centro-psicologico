@@ -29,6 +29,15 @@ export class CitasController {
     return this.citasService.listarPorFecha(fecha, psicologoId, user);
   }
 
+  @Roles(Rol.PSICOLOGO, Rol.ADMINISTRADOR)
+  @Get('estadisticas-psicologo')
+  async obtenerEstadisticasPsicologo(
+    @Query('psicologoId') psicologoId?: string,
+    @UsuarioActual() user?: any,
+  ) {
+    return this.citasService.obtenerEstadisticasPsicologo(user, psicologoId);
+  }
+
   @Roles(Rol.ADMINISTRADOR, Rol.RECEPCIONISTA, Rol.PSICOLOGO, Rol.PACIENTE)
   @Get(':id')
   async obtenerPorId(@Param('id') id: string, @UsuarioActual() user?: any) {

@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import {
   Calendar, LogOut, Video, RefreshCw, Plus, BrainCircuit, Printer,
-  FileText, CheckCircle2, XCircle, CalendarClock, AlertCircle, ArrowLeft
+  FileText, CheckCircle2, XCircle, CalendarClock, AlertCircle, ArrowLeft,
+  Users, BarChart3, Search, ChevronRight, ClipboardList, UserCheck, TrendingUp
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { LogoAxioma } from '@/components/logo-axioma';
@@ -17,12 +18,18 @@ import {
   fechaCorta, horaCorta, fechaYmdLocal, horaHmLocal, foco,
 } from '@/lib/ui';
 
+type TabPsicologo = 'agenda' | 'pacientes' | 'estadisticas';
+
 export default function PortalPsicologo() {
   const router = useRouter();
   const [usuario, setUsuario] = useState<any>(null);
+  const [tabActiva, setTabActiva] = useState<TabPsicologo>('agenda');
   const [citas, setCitas] = useState<any[]>([]);
+  const [estadisticas, setEstadisticas] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
   const [filtroFecha, setFiltroFecha] = useState<string>('');
+  const [busquedaPaciente, setBusquedaPaciente] = useState<string>('');
+  const [pacienteSeleccionadoId, setPacienteSeleccionadoId] = useState<string | null>(null);
   const [errorAcceso, setErrorAcceso] = useState<string | null>(null);
 
   // Modal Nota SOAP
@@ -74,8 +81,12 @@ export default function PortalPsicologo() {
     setErrorAcceso(null);
     try {
       const url = fecha ? `/citas?fecha=${fecha}` : '/citas';
-      const data = await apiFetch(url);
+      const [data, dataStats] = await Promise.all([
+        apiFetch(url),
+        apiFetch('/citas/estadisticas-psicologo').catch(() => null),
+      ]);
       setCitas(data || []);
+      if (dataStats) setEstadisticas(dataStats);
     } catch (err: any) {
       console.error('Error al cargar citas de psicólogo:', err);
       if (err.status === 403) {
@@ -373,216 +384,777 @@ export default function PortalPsicologo() {
     }
   };
 
-  // Métricas
+  // Métricas de agenda
   const totalCitas = citas.length;
   const atendidas = citas.filter((c) => c.estado === 'ATENDIDA').length;
   const pendientes = citas.filter((c) => c.estado === 'PROGRAMADA' || c.estado === 'CONFIRMADA').length;
 
-  return (
-    <div className="min-h-screen bg-axioma-50 font-sans text-axiomaText-ink antialiased selection:bg-axioma-200">
-      
-      {/* HEADER */}
-      <header className="sticky top-0 z-40 border-b border-axioma-200/80 bg-axioma-900 text-white shadow-panel">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
-          <div className="flex items-center gap-4">
-            <LogoAxioma oscuro subtitulo="Portal Clínico • C.Ps.P." />
-            <Link href="/" className="hidden text-xs text-axioma-200 hover:text-white sm:inline-flex items-center gap-1">
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span>Inicio</span>
-            </Link>
-          </div>
+  // Construcción de lista de pacientes únicos (desde endpoint o fallback desde citas)
+  const listaPacientes: any[] = estadisticas?.pacientes ?? (() => {
+    const mapa = new Map<string, any>();
+    citas.forEach((c) => {
+      if (!c.paciente) return;
+      if (!mapa.has(c.pacienteId)) {
+        mapa.set(c.pacienteId, {
+          paciente: c.paciente,
+          totalCitas: 0,
+          citasAtendidas: 0,
+          inasistencias: 0,
+          ultimaCita: c.fechaHoraInicio,
+          citas: [],
+          notasSoap: [],
+        });
+      }
+      const item = mapa.get(c.pacienteId);
+      item.totalCitas += 1;
+      if (c.estado === 'ATENDIDA') item.citasAtendidas += 1;
+      if (c.estado === 'NO_ASISTIO') item.inasistencias += 1;
+      item.citas.push(c);
+      if (c.evolucionClinica) {
+        item.notasSoap.push({
+          ...c.evolucionClinica,
+          cita: c,
+          fechaHoraInicio: c.fechaHoraInicio,
+          fechaHoraFin: c.fechaHoraFin,
+          tipoCita: c.tipoCita,
+        });
+      }
+    });
+    return Array.from(mapa.values());
+  })();
 
-          <div className="flex items-center gap-4">
-            <div className="hidden text-right sm:block">
-              <span className="block text-sm font-semibold text-white">
-                {usuario?.perfil?.nombres ? `Lic. ${usuario.perfil.nombres} ${usuario.perfil.apellidos}` : usuario?.correo}
-              </span>
-              <span className="text-xs text-axioma-200">
-                {usuario?.perfil?.numeroColegiatura ? `Colegiatura: ${usuario.perfil.numeroColegiatura}` : 'Terapeuta Colegiado'}
-              </span>
-            </div>
+  const pacientesFiltrados = listaPacientes.filter((item) => {
+    if (!busquedaPaciente.trim()) return true;
+    const q = busquedaPaciente.toLowerCase();
+    const p = item.paciente;
+    return (
+      p?.dni?.toLowerCase().includes(q) ||
+      p?.nombres?.toLowerCase().includes(q) ||
+      p?.apellidos?.toLowerCase().includes(q)
+    );
+  });
+
+  const pacienteDetalleActivo =
+    pacientesFiltrados.find((p) => p.paciente?.id === pacienteSeleccionadoId) ||
+    pacientesFiltrados[0] ||
+    null;
+
+  // Métricas de Mis Estadísticas
+  const ahoraMes = new Date();
+  const sesionesAtendidasMes =
+    estadisticas?.sesionesAtendidasMes ??
+    citas.filter((c) => {
+      const f = new Date(c.fechaHoraInicio);
+      return (
+        c.estado === 'ATENDIDA' &&
+        f.getMonth() === ahoraMes.getMonth() &&
+        f.getFullYear() === ahoraMes.getFullYear()
+      );
+    }).length;
+  const pacientesActivosCount = estadisticas?.pacientesActivos ?? listaPacientes.length;
+  const totalNoAsistio =
+    estadisticas?.totalInasistencias ?? citas.filter((c) => c.estado === 'NO_ASISTIO').length;
+  const tasaInasistencia =
+    estadisticas?.tasaInasistencia ??
+    (atendidas + totalNoAsistio > 0
+      ? Math.round((totalNoAsistio / (atendidas + totalNoAsistio)) * 100)
+      : 0);
+  const sesionesPorSemana: any[] = estadisticas?.sesionesPorSemana ?? [];
+  const maxSesionesSemana = Math.max(
+    1,
+    ...sesionesPorSemana.map((s: any) => Math.max(s.total || 0, s.atendidas || 0))
+  );
+
+  const pestanas: { id: TabPsicologo; Icono: typeof Calendar; texto: string }[] = [
+    { id: 'agenda', Icono: Calendar, texto: 'Mi Agenda' },
+    { id: 'pacientes', Icono: Users, texto: 'Mis Pacientes' },
+    { id: 'estadisticas', Icono: BarChart3, texto: 'Mis Estadísticas' },
+  ];
+
+  return (
+    <div className="flex min-h-screen flex-col bg-axioma-50 font-sans text-axiomaText-ink antialiased selection:bg-axioma-200 lg:flex-row">
+
+      {/* SIDEBAR */}
+      <aside className="flex shrink-0 flex-col gap-4 bg-axioma-900 p-4 text-white lg:sticky lg:top-0 lg:h-screen lg:w-72 lg:justify-between lg:gap-0 lg:p-6">
+        <div>
+          <div className="flex items-center justify-between">
+            <LogoAxioma oscuro subtitulo="Portal Clínico • C.Ps.P." />
             <button
               onClick={cerrarSesion}
-              className="flex items-center gap-1.5 rounded-button bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/20"
+              title="Cerrar Sesión"
+              aria-label="Cerrar sesión"
+              className={`rounded-full p-2.5 text-axioma-200 transition hover:bg-white/10 hover:text-white lg:hidden ${focoClaro}`}
             >
-              <LogOut className="h-4 w-4" />
-              <span>Cerrar sesión</span>
+              <LogOut className="h-5 w-5" />
             </button>
           </div>
+
+          <nav
+            className="-mx-1 mt-4 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:mt-8 lg:flex-col lg:gap-1.5 lg:overflow-visible lg:px-0 lg:pb-0"
+            aria-label="Secciones del portal del psicólogo"
+          >
+            {pestanas.map(({ id, Icono, texto }) => (
+              <button
+                key={id}
+                onClick={() => setTabActiva(id)}
+                aria-current={tabActiva === id ? 'page' : undefined}
+                className={`flex shrink-0 items-center gap-3 whitespace-nowrap rounded-button px-4 py-2.5 text-sm font-medium transition-colors duration-150 lg:w-full ${focoClaro} ${
+                  tabActiva === id
+                    ? 'bg-axioma-600 text-white shadow-sm'
+                    : 'text-axioma-100 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <Icono className="h-4 w-4" />
+                <span>{texto}</span>
+              </button>
+            ))}
+          </nav>
         </div>
-      </header>
+
+        {/* Perfil del psicólogo (desktop) */}
+        <div className="hidden space-y-3 lg:block">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs text-axioma-200 transition hover:text-white"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>Volver al sitio público</span>
+          </Link>
+          <div className="rounded-card-sm bg-white/10 p-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-white">
+                  {usuario?.perfil?.nombres
+                    ? `Lic. ${usuario.perfil.nombres} ${usuario.perfil.apellidos}`
+                    : usuario?.correo}
+                </p>
+                <p className="truncate text-xs font-medium text-axioma-200">
+                  {usuario?.perfil?.numeroColegiatura
+                    ? `Colegiatura: ${usuario.perfil.numeroColegiatura}`
+                    : 'Terapeuta Colegiado'}
+                </p>
+              </div>
+              <button
+                onClick={cerrarSesion}
+                title="Cerrar Sesión"
+                aria-label="Cerrar sesión"
+                className={`shrink-0 rounded-full p-2 text-axioma-200 transition hover:bg-white/10 hover:text-white ${focoClaro}`}
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
 
       {/* CONTENIDO PRINCIPAL */}
-      <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8 space-y-6">
+      <main className="min-w-0 flex-1 animate-fade-in p-4 motion-reduce:animate-none sm:p-6 lg:p-10">
+        <div className="mx-auto max-w-[1400px] space-y-6">
 
-        {errorAcceso && (
-          <div className="flex items-center gap-3 rounded-card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            <AlertCircle className="h-5 w-5 shrink-0 text-amber-600" />
-            <span>{errorAcceso}</span>
-          </div>
-        )}
+          {errorAcceso && (
+            <div className="flex items-center gap-3 rounded-card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <AlertCircle className="h-5 w-5 shrink-0 text-amber-600" />
+              <span>{errorAcceso}</span>
+            </div>
+          )}
 
-        {/* Título y Filtros */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink sm:text-3xl">
-              Agenda & Seguimiento Clínico
-            </h1>
-            <p className="mt-1 text-sm text-axiomaText-soft">
-              Supervisa tus consultas del día, registra la evolución en notas SOAP y controla la asistencia.
-            </p>
-          </div>
+          {/* ========================================================================= */}
+          {/* TAB 1: MI AGENDA ("Agenda & Seguimiento Clínico")                         */}
+          {/* ========================================================================= */}
+          {tabActiva === 'agenda' && (
+            <div className="space-y-6">
+              {/* Título y Filtros */}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h1 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink sm:text-3xl">
+                    Agenda & Seguimiento Clínico
+                  </h1>
+                  <p className="mt-1 text-sm text-axiomaText-soft">
+                    Supervisa tus consultas del día, registra la evolución en notas SOAP y controla la asistencia.
+                  </p>
+                </div>
 
-          <div className="flex items-center gap-3">
-            <input
-              type="date"
-              value={filtroFecha}
-              onChange={(e) => {
-                setFiltroFecha(e.target.value);
-                cargarCitas(e.target.value);
-              }}
-              className="rounded-button border border-axioma-200 bg-white px-3 py-2 text-xs font-medium text-axiomaText-ink shadow-sm"
-            />
-            {filtroFecha && (
-              <button
-                onClick={() => {
-                  setFiltroFecha('');
-                  cargarCitas('');
-                }}
-                className="text-xs text-axiomaText-soft hover:text-axioma-700"
-              >
-                Todas las fechas
-              </button>
-            )}
-            <button onClick={() => cargarCitas()} className={btnIcono} title="Actualizar agenda">
-              <RefreshCw className={`h-4 w-4 ${cargando ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-        </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="date"
+                    value={filtroFecha}
+                    onChange={(e) => {
+                      setFiltroFecha(e.target.value);
+                      cargarCitas(e.target.value);
+                    }}
+                    className="rounded-button border border-axioma-200 bg-white px-3 py-2 text-xs font-medium text-axiomaText-ink shadow-sm"
+                  />
+                  {filtroFecha && (
+                    <button
+                      onClick={() => {
+                        setFiltroFecha('');
+                        cargarCitas('');
+                      }}
+                      className="text-xs text-axiomaText-soft hover:text-axioma-700"
+                    >
+                      Todas las fechas
+                    </button>
+                  )}
+                  <button onClick={() => cargarCitas()} className={btnIcono} title="Actualizar agenda">
+                    <RefreshCw className={`h-4 w-4 ${cargando ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
 
-        {/* Métricas rápidas */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-card border border-axioma-200 bg-white p-5 shadow-card">
-            <span className="text-xs font-medium text-axiomaText-soft">Consultas en Agenda</span>
-            <p className="mt-2 text-3xl font-bold tracking-heading text-axiomaText-ink">{totalCitas}</p>
-          </div>
-          <div className="rounded-card border border-axioma-200 bg-axioma-100 p-5 shadow-card">
-            <span className="text-xs font-medium text-axioma-800">Sesiones Atendidas</span>
-            <p className="mt-2 text-3xl font-bold tracking-heading text-axioma-900">{atendidas}</p>
-          </div>
-          <div className="rounded-card border border-white/60 bg-heather p-5 shadow-card">
-            <span className="text-xs font-medium text-axiomaText-soft">Consultas Pendientes</span>
-            <p className="mt-2 text-3xl font-bold tracking-heading text-axiomaText-ink">{pendientes}</p>
-          </div>
-        </div>
+              {/* Métricas rápidas */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="rounded-card border border-axioma-200 bg-white p-5 shadow-card">
+                  <span className="text-xs font-medium text-axiomaText-soft">Consultas en Agenda</span>
+                  <p className="mt-2 text-3xl font-bold tracking-heading text-axiomaText-ink">{totalCitas}</p>
+                </div>
+                <div className="rounded-card border border-axioma-200 bg-axioma-100 p-5 shadow-card">
+                  <span className="text-xs font-medium text-axioma-800">Sesiones Atendidas</span>
+                  <p className="mt-2 text-3xl font-bold tracking-heading text-axioma-900">{atendidas}</p>
+                </div>
+                <div className="rounded-card border border-white/60 bg-heather p-5 shadow-card">
+                  <span className="text-xs font-medium text-axiomaText-soft">Consultas Pendientes</span>
+                  <p className="mt-2 text-3xl font-bold tracking-heading text-axiomaText-ink">{pendientes}</p>
+                </div>
+              </div>
 
-        {/* Tabla de Citas */}
-        <div className={`${card} overflow-hidden`}>
-          <div className="border-b border-axioma-100 bg-axioma-50/60 px-6 py-4">
-            <h2 className="font-display text-lg font-medium tracking-heading text-axiomaText-ink">
-              Pacientes citados ({citas.length})
-            </h2>
-          </div>
+              {/* Tabla de Citas */}
+              <div className={`${card} overflow-hidden`}>
+                <div className="border-b border-axioma-100 bg-axioma-50/60 px-6 py-4">
+                  <h2 className="font-display text-lg font-medium tracking-heading text-axiomaText-ink">
+                    Pacientes citados ({citas.length})
+                  </h2>
+                </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px] text-left text-sm text-axiomaText-soft">
-              <thead className="border-b border-axioma-100 bg-axioma-50">
-                <tr>
-                  <th className={thClase}>Paciente</th>
-                  <th className={thClase}>Fecha y Turno</th>
-                  <th className={thClase}>Tipo Cita</th>
-                  <th className={thClase}>Riesgo No-Show (ML)</th>
-                  <th className={thClase}>Estado</th>
-                  <th className={`${thClase} text-right`}>Acción Clínica</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-axioma-100">
-                {citas.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-axiomaText-soft">
-                      No tienes citas programadas para el criterio seleccionado.
-                    </td>
-                  </tr>
-                ) : (
-                  citas.map((c) => (
-                    <tr key={c.id} className="transition-colors hover:bg-axioma-50">
-                      <td className={tdClase}>
-                        <div className="font-semibold text-axiomaText-ink">
-                          {c.paciente ? `${c.paciente.nombres} ${c.paciente.apellidos}` : 'Paciente'}
-                        </div>
-                        <div className="text-xs text-axiomaText-soft">DNI: {c.paciente?.dni || 'N/A'}</div>
-                      </td>
-                      <td className={tdClase}>
-                        <div className="font-medium text-axiomaText-ink">{fechaCorta(c.fechaHoraInicio)}</div>
-                        <div className="text-xs tabular-nums text-axioma-700">
-                          {horaCorta(c.fechaHoraInicio)} - {horaCorta(c.fechaHoraFin)}
-                        </div>
-                      </td>
-                      <td className={tdClase}>
-                        <span className="rounded-tag bg-axioma-100 px-2 py-0.5 text-xs font-semibold text-axioma-800">
-                          {c.tipoCita || 'TERAPIA'}
-                        </span>
-                      </td>
-                      <td className={tdClase}>
-                        {c.nivelRiesgoInasistencia ? (
-                          <span className={`${pastilla} ${claseRiesgo(c.nivelRiesgoInasistencia)}`}>
-                            {c.nivelRiesgoInasistencia} ({Math.round(Number(c.probabilidadInasistencia || 0) * 100)}%)
-                          </span>
-                        ) : (
-                          <span className="text-xs text-axiomaText-soft">Normal</span>
-                        )}
-                      </td>
-                      <td className={tdClase}>
-                        <span className={`${pastilla} ${claseEstadoCita(c.estado)}`}>
-                          {c.estado}
-                        </span>
-                      </td>
-                      <td className={`${tdClase} text-right`}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          {c.estado === 'PROGRAMADA' && (
-                            <>
-                              <button
-                                onClick={() => handleMarcarAsistencia(c)}
-                                className={`${btnPrimary} px-2.5 py-1 text-xs`}
-                              >
-                                Asistencia
-                              </button>
-                              <button
-                                onClick={() => handleMarcarNoAsistio(c)}
-                                className="rounded-button border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
-                              >
-                                No asistió
-                              </button>
-                              <button
-                                onClick={() => abrirModalReprogramar(c)}
-                                className={`${btnSecondary} px-2 py-1 text-xs`}
-                              >
-                                Reprogramar
-                              </button>
-                              <button
-                                onClick={() => handleCancelar(c)}
-                                className="rounded p-1 text-axiomaText-soft hover:text-rose-700"
-                                title="Cancelar cita"
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={() => abrirModalNota(c)}
-                            className="inline-flex items-center gap-1 rounded-button bg-axioma-100 px-2.5 py-1 text-xs font-semibold text-axioma-800 hover:bg-axioma-200"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                            <span>Nota SOAP</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[850px] text-left text-sm text-axiomaText-soft">
+                    <thead className="border-b border-axioma-100 bg-axioma-50">
+                      <tr>
+                        <th className={thClase}>Paciente</th>
+                        <th className={thClase}>Fecha y Turno</th>
+                        <th className={thClase}>Tipo Cita</th>
+                        <th className={thClase}>Riesgo No-Show (ML)</th>
+                        <th className={thClase}>Estado</th>
+                        <th className={`${thClase} text-right`}>Acción Clínica</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-axioma-100">
+                      {citas.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-12 text-center text-axiomaText-soft">
+                            No tienes citas programadas para el criterio seleccionado.
+                          </td>
+                        </tr>
+                      ) : (
+                        citas.map((c) => (
+                          <tr key={c.id} className="transition-colors hover:bg-axioma-50">
+                            <td className={tdClase}>
+                              <div className="font-semibold text-axiomaText-ink">
+                                {c.paciente ? `${c.paciente.nombres} ${c.paciente.apellidos}` : 'Paciente'}
+                              </div>
+                              <div className="text-xs text-axiomaText-soft">DNI: {c.paciente?.dni || 'N/A'}</div>
+                            </td>
+                            <td className={tdClase}>
+                              <div className="font-medium text-axiomaText-ink">{fechaCorta(c.fechaHoraInicio)}</div>
+                              <div className="text-xs tabular-nums text-axioma-700">
+                                {horaCorta(c.fechaHoraInicio)} - {horaCorta(c.fechaHoraFin)}
+                              </div>
+                            </td>
+                            <td className={tdClase}>
+                              <span className="rounded-tag bg-axioma-100 px-2 py-0.5 text-xs font-semibold text-axioma-800">
+                                {c.tipoCita || 'TERAPIA'}
+                              </span>
+                            </td>
+                            <td className={tdClase}>
+                              {c.nivelRiesgoInasistencia ? (
+                                <span className={`${pastilla} ${claseRiesgo(c.nivelRiesgoInasistencia)}`}>
+                                  {c.nivelRiesgoInasistencia} ({Math.round(Number(c.probabilidadInasistencia || 0) * 100)}%)
+                                </span>
+                              ) : (
+                                <span className="text-xs text-axiomaText-soft">Normal</span>
+                              )}
+                            </td>
+                            <td className={tdClase}>
+                              <span className={`${pastilla} ${claseEstadoCita(c.estado)}`}>
+                                {c.estado}
+                              </span>
+                            </td>
+                            <td className={`${tdClase} text-right`}>
+                              <div className="flex items-center justify-end gap-1.5">
+                                {c.estado === 'PROGRAMADA' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleMarcarAsistencia(c)}
+                                      className={`${btnPrimary} px-2.5 py-1 text-xs`}
+                                    >
+                                      Asistencia
+                                    </button>
+                                    <button
+                                      onClick={() => handleMarcarNoAsistio(c)}
+                                      className="rounded-button border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                                    >
+                                      No asistió
+                                    </button>
+                                    <button
+                                      onClick={() => abrirModalReprogramar(c)}
+                                      className={`${btnSecondary} px-2 py-1 text-xs`}
+                                    >
+                                      Reprogramar
+                                    </button>
+                                    <button
+                                      onClick={() => handleCancelar(c)}
+                                      className="rounded p-1 text-axiomaText-soft hover:text-rose-700"
+                                      title="Cancelar cita"
+                                    >
+                                      <XCircle className="h-4 w-4" />
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => abrirModalNota(c)}
+                                  className="inline-flex items-center gap-1 rounded-button bg-axioma-100 px-2.5 py-1 text-xs font-semibold text-axioma-800 hover:bg-axioma-200"
+                                >
+                                  <FileText className="h-3.5 w-3.5" />
+                                  <span>Nota SOAP</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 2: MIS PACIENTES (Pacientes únicos + Historial completo SOAP)         */}
+          {/* ========================================================================= */}
+          {tabActiva === 'pacientes' && (
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h1 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink sm:text-3xl">
+                    Mis Pacientes & Expediente Clínico
+                  </h1>
+                  <p className="mt-1 text-sm text-axiomaText-soft">
+                    Selecciona un paciente de tu cartera para revisar su historial completo de evoluciones SOAP.
+                  </p>
+                </div>
+                <button onClick={() => cargarCitas()} className={btnIcono} title="Sincronizar expedientes">
+                  <RefreshCw className={`h-4 w-4 ${cargando ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {/* Buscador */}
+              <div className={`${card} flex items-center gap-3 p-4`}>
+                <Search className="h-5 w-5 text-axiomaText-soft" />
+                <input
+                  type="text"
+                  placeholder="Buscar paciente por DNI, nombres o apellidos..."
+                  value={busquedaPaciente}
+                  onChange={(e) => setBusquedaPaciente(e.target.value)}
+                  className="w-full bg-transparent text-sm text-axiomaText-ink outline-none placeholder:text-axiomaText-soft"
+                />
+                {busquedaPaciente && (
+                  <button
+                    onClick={() => setBusquedaPaciente('')}
+                    className="text-xs font-medium text-axiomaText-soft hover:text-axiomaText-ink"
+                  >
+                    Limpiar
+                  </button>
                 )}
-              </tbody>
-            </table>
-          </div>
+              </div>
+
+              {/* Grid Maestro-Detalle: Lista de pacientes únicos (izq) + Historial SOAP completo (der) */}
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+                {/* Columna Izquierda: Lista de Pacientes Únicos */}
+                <div className="lg:col-span-5 space-y-3">
+                  <div className={`${card} overflow-hidden`}>
+                    <div className="border-b border-axioma-100 bg-axioma-50/70 px-5 py-3.5">
+                      <h2 className="font-display text-base font-medium text-axiomaText-ink">
+                        Pacientes asignados ({pacientesFiltrados.length})
+                      </h2>
+                    </div>
+
+                    {pacientesFiltrados.length === 0 ? (
+                      <div className="p-8 text-center text-sm text-axiomaText-soft">
+                        No se encontraron pacientes registrados en tu historial de citas.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-axioma-100 max-h-[620px] overflow-y-auto">
+                        {pacientesFiltrados.map((item) => {
+                          const p = item.paciente;
+                          const seleccionado = pacienteDetalleActivo?.paciente?.id === p?.id;
+                          return (
+                            <button
+                              key={p?.id}
+                              type="button"
+                              onClick={() => setPacienteSeleccionadoId(p?.id)}
+                              className={`w-full text-left px-5 py-4 transition-colors flex items-center justify-between gap-3 ${
+                                seleccionado
+                                  ? 'bg-axioma-100/80 border-l-4 border-axioma-700'
+                                  : 'hover:bg-axioma-50/70'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <p className="font-semibold text-sm text-axiomaText-ink truncate">
+                                  {p?.nombres} {p?.apellidos}
+                                </p>
+                                <p className="mt-0.5 text-xs text-axiomaText-soft">
+                                  DNI: <span className="font-mono">{p?.dni}</span>
+                                  {p?.telefono ? ` • Tel: ${p.telefono}` : ''}
+                                </p>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                                  <span className="rounded-tag bg-white border border-axioma-200 px-2 py-0.5 font-medium text-axioma-800">
+                                    {item.citasAtendidas} {item.citasAtendidas === 1 ? 'sesión atendida' : 'sesiones atendidas'}
+                                  </span>
+                                  <span className="rounded-tag bg-heather px-2 py-0.5 font-medium text-axiomaText-ink">
+                                    {item.notasSoap?.length || 0} {item.notasSoap?.length === 1 ? 'nota SOAP' : 'notas SOAP'}
+                                  </span>
+                                </div>
+                              </div>
+                              <ChevronRight
+                                className={`h-4 w-4 shrink-0 transition-transform ${
+                                  seleccionado ? 'text-axioma-800 translate-x-0.5' : 'text-axiomaText-soft'
+                                }`}
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Columna Derecha: Historial Completo de Notas SOAP del Paciente Seleccionado */}
+                <div className="lg:col-span-7">
+                  {!pacienteDetalleActivo ? (
+                    <div className={`${card} p-10 text-center text-sm text-axiomaText-soft`}>
+                      Selecciona un paciente de la lista para visualizar su historial clínico de notas SOAP.
+                    </div>
+                  ) : (
+                    <div className={`${card} overflow-hidden`}>
+                      {/* Cabecera del expediente del paciente */}
+                      <div className="border-b border-axioma-200/80 bg-heather/60 px-6 py-5">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <span className="inline-block rounded-tag bg-axioma-800 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-white">
+                              Expediente Clínico
+                            </span>
+                            <h2 className="mt-1.5 font-display text-xl font-medium text-axiomaText-ink">
+                              {pacienteDetalleActivo.paciente?.nombres} {pacienteDetalleActivo.paciente?.apellidos}
+                            </h2>
+                            <p className="text-xs text-axiomaText-soft">
+                              DNI: {pacienteDetalleActivo.paciente?.dni} • Correo: {pacienteDetalleActivo.paciente?.correo || 'No registrado'} • Teléfono: {pacienteDetalleActivo.paciente?.telefono || 'No registrado'}
+                            </p>
+                          </div>
+                          <div className="text-left sm:text-right">
+                            <span className="text-xs font-medium text-axiomaText-soft">Total evoluciones registradas</span>
+                            <p className="font-display text-2xl font-bold text-axioma-900">
+                              {pacienteDetalleActivo.notasSoap?.length || 0}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Cuerpo: Lista cronológica de todas las notas SOAP */}
+                      <div className="p-6 space-y-5 max-h-[680px] overflow-y-auto">
+                        {(!pacienteDetalleActivo.notasSoap || pacienteDetalleActivo.notasSoap.length === 0) ? (
+                          <div className="rounded-card-sm border border-dashed border-axioma-200 bg-axioma-50/50 p-8 text-center">
+                            <ClipboardList className="mx-auto h-8 w-8 text-axioma-600/70" />
+                            <p className="mt-2 text-sm font-medium text-axiomaText-ink">
+                              Este paciente aún no cuenta con notas SOAP registradas.
+                            </p>
+                            <p className="mt-1 text-xs text-axiomaText-soft">
+                              Puedes registrar la evolución desde su cita correspondiente.
+                            </p>
+                            {pacienteDetalleActivo.citas?.[0] && (
+                              <button
+                                type="button"
+                                onClick={() => abrirModalNota(pacienteDetalleActivo.citas[0])}
+                                className={`${btnPrimary} ${tamSm} mt-4`}
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                                <span>Registrar Nota SOAP de última cita</span>
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          pacienteDetalleActivo.notasSoap.map((ev: any, idx: number) => {
+                            const obs = parsearObservaciones(ev.observacionesConductuales || '');
+                            const soap = parsearNotaEvolucion(ev.notaEvolucion || '');
+                            const numSesion = pacienteDetalleActivo.notasSoap.length - idx;
+                            return (
+                              <div
+                                key={ev.id || idx}
+                                className="rounded-card border border-axioma-200 bg-white shadow-sm overflow-hidden"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axioma-100 bg-axioma-50 px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="rounded bg-axioma-800 px-2 py-0.5 text-[11px] font-bold text-white">
+                                      Evolución #{numSesion}
+                                    </span>
+                                    <span className="text-xs font-semibold text-axiomaText-ink">
+                                      {fechaCorta(ev.fechaHoraInicio || ev.fechaSesion)} • {horaCorta(ev.fechaHoraInicio || ev.fechaSesion)}
+                                    </span>
+                                    <span className="rounded-tag bg-axioma-100 px-2 py-0.5 text-[11px] font-semibold text-axioma-800">
+                                      CIE-10: {soap.cie10}
+                                    </span>
+                                  </div>
+                                  {ev.cita && (
+                                    <button
+                                      type="button"
+                                      onClick={() => abrirModalNota(ev.cita)}
+                                      className="inline-flex items-center gap-1 rounded-button border border-axioma-200 bg-white px-2.5 py-1 text-xs font-semibold text-axioma-800 hover:bg-axioma-100"
+                                    >
+                                      <FileText className="h-3.5 w-3.5" />
+                                      <span>Ver / Imprimir A4</span>
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div className="p-4 space-y-3 text-xs">
+                                  <div>
+                                    <span className="font-semibold text-axiomaText-soft">Motivo / Foco de sesión: </span>
+                                    <span className="font-medium text-axiomaText-ink">
+                                      {ev.motivoConsulta || 'Consulta psicoterapéutica'}
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div className="rounded-card-sm border border-axioma-100 bg-axioma-50/40 p-3">
+                                      <p className="font-bold uppercase tracking-wider text-axioma-800 text-[11px]">
+                                        S — Subjetivo
+                                      </p>
+                                      <p className="mt-1 text-axiomaText-body leading-relaxed">
+                                        {soap.subjetivo || ev.notaEvolucion || 'Sin registro subjetivo.'}
+                                      </p>
+                                    </div>
+
+                                    <div className="rounded-card-sm border border-axioma-100 bg-axioma-50/40 p-3">
+                                      <p className="font-bold uppercase tracking-wider text-axioma-800 text-[11px]">
+                                        O — Objetivo (Examen Mental)
+                                      </p>
+                                      <p className="mt-1 text-axiomaText-body">
+                                        <strong>Afecto:</strong> {obs.afecto} | <strong>Lenguaje:</strong> {obs.lenguaje}
+                                      </p>
+                                      <p className="mt-0.5 text-axiomaText-body">
+                                        <strong>Conducta:</strong> {obs.conducta}
+                                      </p>
+                                    </div>
+
+                                    <div className="rounded-card-sm border border-axioma-100 bg-heather/30 p-3">
+                                      <p className="font-bold uppercase tracking-wider text-axioma-900 text-[11px]">
+                                        A — Análisis & Técnicas
+                                      </p>
+                                      <p className="mt-1 text-axiomaText-body leading-relaxed">
+                                        {soap.analisis || 'Evolución clínica en curso.'}
+                                      </p>
+                                      {ev.tecnicasUtilizadas && (
+                                        <p className="mt-1 text-[11px] text-axiomaText-soft">
+                                          <strong>Técnicas:</strong> {ev.tecnicasUtilizadas}
+                                        </p>
+                                      )}
+                                    </div>
+
+                                    <div className="rounded-card-sm border border-axioma-100 bg-heather/30 p-3">
+                                      <p className="font-bold uppercase tracking-wider text-axioma-900 text-[11px]">
+                                        P — Plan & Tareas
+                                      </p>
+                                      <p className="mt-1 text-axiomaText-body">
+                                        <strong>Tareas:</strong> {ev.tareasCasa || 'Continuar autorregistros.'}
+                                      </p>
+                                      <p className="mt-0.5 text-axiomaText-body">
+                                        <strong>Seguimiento:</strong> {soap.proximaSesion}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 3: MIS ESTADÍSTICAS (Resumen mensual + Gráfico de barras semanal)     */}
+          {/* ========================================================================= */}
+          {tabActiva === 'estadisticas' && (
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h1 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink sm:text-3xl">
+                    Mis Estadísticas Clínicas
+                  </h1>
+                  <p className="mt-1 text-sm text-axiomaText-soft">
+                    Indicadores de desempeño terapéutico, adherencia de pacientes y evolución semanal de sesiones.
+                  </p>
+                </div>
+                <button onClick={() => cargarCitas()} className={btnIcono} title="Actualizar estadísticas">
+                  <RefreshCw className={`h-4 w-4 ${cargando ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {/* 3 Tarjetas de Resumen solicitadas */}
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+                <div className="rounded-card border border-axioma-200 bg-white p-6 shadow-card">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-axiomaText-soft">
+                      Sesiones Atendidas (Mes)
+                    </span>
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-axioma-100 text-axioma-800">
+                      <CheckCircle2 className="h-5 w-5" />
+                    </span>
+                  </div>
+                  <p className="mt-3 font-display text-4xl font-bold tracking-heading text-axiomaText-ink">
+                    {sesionesAtendidasMes}
+                  </p>
+                  <p className="mt-1 text-xs text-axiomaText-soft">
+                    Total histórico acumulado: <strong className="text-axiomaText-ink">{estadisticas?.totalAtendidas ?? atendidas}</strong> sesiones
+                  </p>
+                </div>
+
+                <div className="rounded-card border border-axioma-200 bg-axioma-100 p-6 shadow-card">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-axioma-800">
+                      Pacientes Activos
+                    </span>
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-axioma-900">
+                      <UserCheck className="h-5 w-5" />
+                    </span>
+                  </div>
+                  <p className="mt-3 font-display text-4xl font-bold tracking-heading text-axioma-900">
+                    {pacientesActivosCount}
+                  </p>
+                  <p className="mt-1 text-xs text-axioma-800">
+                    Consultantes únicos asignados a tu cartera clínica
+                  </p>
+                </div>
+
+                <div className="rounded-card border border-white/60 bg-heather p-6 shadow-card">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-axiomaText-soft">
+                      Tasa de Inasistencia
+                    </span>
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-rose-700">
+                      <TrendingUp className="h-5 w-5" />
+                    </span>
+                  </div>
+                  <p className="mt-3 font-display text-4xl font-bold tracking-heading text-axiomaText-ink">
+                    {tasaInasistencia}%
+                  </p>
+                  <p className="mt-1 text-xs text-axiomaText-soft">
+                    {totalNoAsistio} {totalNoAsistio === 1 ? 'inasistencia registrada' : 'inasistencias registradas'} (No-Show)
+                  </p>
+                </div>
+              </div>
+
+              {/* Gráfico de barras de Sesiones por Semana */}
+              <div className={`${card} p-6`}>
+                <div className="flex flex-col gap-3 border-b border-axioma-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="font-display text-lg font-medium tracking-heading text-axiomaText-ink">
+                      Evolución de Sesiones por Semana (Últimas 4 semanas)
+                    </h2>
+                    <p className="text-xs text-axiomaText-soft">
+                      Comparativa semanal entre sesiones efectivamente atendidas, programadas e inasistencias.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 text-xs">
+                    <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                      <span className="h-3 w-3 rounded-sm bg-axioma-700" />
+                      <span>Atendidas</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                      <span className="h-3 w-3 rounded-sm bg-axioma-300" />
+                      <span>Programadas</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-axiomaText-soft">
+                      <span className="h-3 w-3 rounded-sm bg-rose-400" />
+                      <span>No asistió</span>
+                    </span>
+                  </div>
+                </div>
+
+                {sesionesPorSemana.length === 0 ? (
+                  <div className="py-12 text-center text-sm text-axiomaText-soft">
+                    Aún no hay suficientes registros semanales para graficar.
+                  </div>
+                ) : (
+                  <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-4">
+                    {sesionesPorSemana.map((sem: any, idx: number) => {
+                      const pctAtendidas = Math.round(((sem.atendidas || 0) / maxSesionesSemana) * 100);
+                      const pctProgramadas = Math.round(((sem.programadas || 0) / maxSesionesSemana) * 100);
+                      const pctNoAsistio = Math.round(((sem.noAsistio || 0) / maxSesionesSemana) * 100);
+
+                      return (
+                        <div
+                          key={idx}
+                          className="flex flex-col justify-between rounded-card-sm border border-axioma-100 bg-axioma-50/40 p-4"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-axiomaText-ink">{sem.etiqueta}</span>
+                              <span className="rounded-tag bg-white px-2 py-0.5 text-[11px] font-semibold text-axioma-800 border border-axioma-200">
+                                {sem.total} {sem.total === 1 ? 'cita' : 'citas'}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-[11px] text-axiomaText-soft">{sem.rango}</p>
+                          </div>
+
+                          {/* Barras verticales proporcionales */}
+                          <div className="my-5 flex h-36 items-end justify-center gap-3 border-b border-axioma-200/80 px-3 pb-2">
+                            <div className="flex h-full flex-col items-center justify-end gap-1 w-8">
+                              <span className="text-[11px] font-bold text-axioma-800">{sem.atendidas}</span>
+                              <div
+                                className="w-full rounded-t bg-axioma-700 transition-all duration-300"
+                                style={{ height: `${Math.max(pctAtendidas, sem.atendidas > 0 ? 14 : 4)}%` }}
+                                title={`Atendidas: ${sem.atendidas}`}
+                              />
+                            </div>
+                            <div className="flex h-full flex-col items-center justify-end gap-1 w-8">
+                              <span className="text-[11px] font-semibold text-axiomaText-soft">{sem.programadas}</span>
+                              <div
+                                className="w-full rounded-t bg-axioma-300 transition-all duration-300"
+                                style={{ height: `${Math.max(pctProgramadas, sem.programadas > 0 ? 14 : 4)}%` }}
+                                title={`Programadas: ${sem.programadas}`}
+                              />
+                            </div>
+                            <div className="flex h-full flex-col items-center justify-end gap-1 w-8">
+                              <span className="text-[11px] font-semibold text-rose-700">{sem.noAsistio}</span>
+                              <div
+                                className="w-full rounded-t bg-rose-400 transition-all duration-300"
+                                style={{ height: `${Math.max(pctNoAsistio, sem.noAsistio > 0 ? 14 : 4)}%` }}
+                                title={`No asistió: ${sem.noAsistio}`}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-axiomaText-soft">
+                            <span>Efectividad:</span>
+                            <strong className="text-axiomaText-ink">
+                              {sem.atendidas + sem.noAsistio > 0
+                                ? `${Math.round((sem.atendidas / (sem.atendidas + sem.noAsistio)) * 100)}%`
+                                : '100%'}
+                            </strong>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
         </div>
       </main>
 

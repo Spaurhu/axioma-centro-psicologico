@@ -135,6 +135,7 @@ export default function PanelRecepcion() {
   };
 
   // Formularios
+  const [errorModalCita, setErrorModalCita] = useState<string | null>(null);
   const [formCita, setFormCita] = useState({
     pacienteId: '',
     psicologoId: '',
@@ -265,6 +266,7 @@ export default function PanelRecepcion() {
 
   const handleCrearCita = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorModalCita(null);
     const bloques = generarHorariosDisponibles(formCita.fecha);
     const bloque = bloques[parseInt(formCita.horarioIndex)] || bloques[0];
     if (!bloque) {
@@ -298,6 +300,7 @@ export default function PanelRecepcion() {
       });
       toast.success('Cita agendada exitosamente.');
       setMostrarModalCita(false);
+      setErrorModalCita(null);
       setFormCita({
         pacienteId: '',
         psicologoId: '',
@@ -307,9 +310,26 @@ export default function PanelRecepcion() {
       });
       cargarDatos();
     } catch (err: any) {
-      toast.error(err.message || 'Error al agendar cita');
+      const msg = err.message || 'Error al agendar cita';
+      setErrorModalCita(msg);
+      toast.error(msg);
     }
   };
+
+  const pacienteSeleccionadoCita = pacientes.find((p) => p.id === formCita.pacienteId);
+  const paqueteActivoCita = pacienteSeleccionadoCita?.paquetesPaciente?.find(
+    (pk: any) => pk.estado === 'ACTIVO' && pk.sesionesRestantes > 0
+  );
+  const paquetePendienteCita = !paqueteActivoCita
+    ? pacienteSeleccionadoCita?.paquetesPaciente?.find((pk: any) => pk.estado === 'PENDIENTE_PAGO')
+    : null;
+  const psicologoVinculadoId = paqueteActivoCita?.psicologoId || '';
+  const psicologoVinculadoObj = psicologoVinculadoId
+    ? paqueteActivoCita?.psicologo || psicologos.find((ps) => ps.id === psicologoVinculadoId)
+    : null;
+  const nombrePsicologoVinculado = psicologoVinculadoObj
+    ? `${psicologoVinculadoObj.nombres} ${psicologoVinculadoObj.apellidos || ''}`.trim()
+    : 'asignado';
 
   const abrirModalReprogramar = (cita: any) => {
     setCitaSeleccionadaParaReprog(cita);
@@ -1238,13 +1258,31 @@ export default function PanelRecepcion() {
               </p>
 
               <form onSubmit={handleCrearCita} className="mt-6 space-y-4">
+                {errorModalCita && (
+                  <div className="rounded-card-sm border border-red-300 bg-red-50 p-3 text-xs font-medium text-red-700">
+                    {errorModalCita}
+                  </div>
+                )}
+
                 <div>
                   <label htmlFor="pacienteId" className={label}>Paciente</label>
                   <select
                     id="pacienteId"
                     required
                     value={formCita.pacienteId}
-                    onChange={(e) => setFormCita({ ...formCita, pacienteId: e.target.value })}
+                    onChange={(e) => {
+                      const nuevoPacienteId = e.target.value;
+                      const pac = pacientes.find((p) => p.id === nuevoPacienteId);
+                      const pkActivo = pac?.paquetesPaciente?.find(
+                        (pk: any) => pk.estado === 'ACTIVO' && pk.sesionesRestantes > 0
+                      );
+                      setErrorModalCita(null);
+                      setFormCita({
+                        ...formCita,
+                        pacienteId: nuevoPacienteId,
+                        psicologoId: pkActivo?.psicologoId ? pkActivo.psicologoId : formCita.psicologoId,
+                      });
+                    }}
                     className={input}
                   >
                     <option value="">Seleccione paciente...</option>
@@ -1252,6 +1290,24 @@ export default function PanelRecepcion() {
                       <option key={p.id} value={p.id}>{p.nombres} {p.apellidos} ({p.dni})</option>
                     ))}
                   </select>
+
+                  {formCita.pacienteId && (
+                    <>
+                      {paqueteActivoCita ? (
+                        <div className="mt-2 rounded-card-sm border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900">
+                          🎟️ Paquete activo: {paqueteActivoCita.paquete?.nombre || 'Paquete terapéutico'} - {paqueteActivoCita.sesionesRestantes} sesiones restantes
+                        </div>
+                      ) : paquetePendienteCita ? (
+                        <div className="mt-2 rounded-card-sm border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                          ⚠️ Paquete pendiente de pago (No se podrá agendar hasta confirmar el pago)
+                        </div>
+                      ) : (
+                        <p className="mt-1.5 text-xs text-axiomaText-soft">
+                          Sin paquete activo. Se agendará como sesión individual
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 <div>
@@ -1260,7 +1316,10 @@ export default function PanelRecepcion() {
                     id="psicologoId"
                     required
                     value={formCita.psicologoId}
-                    onChange={(e) => setFormCita({ ...formCita, psicologoId: e.target.value })}
+                    onChange={(e) => {
+                      setErrorModalCita(null);
+                      setFormCita({ ...formCita, psicologoId: e.target.value });
+                    }}
                     className={input}
                   >
                     <option value="">Seleccione terapeuta...</option>
@@ -1268,6 +1327,17 @@ export default function PanelRecepcion() {
                       <option key={p.id} value={p.id}>{p.nombres} {p.apellidos} - {p.especialidad}</option>
                     ))}
                   </select>
+
+                  {psicologoVinculadoId && formCita.psicologoId === psicologoVinculadoId && (
+                    <p className="mt-1.5 text-xs font-medium text-emerald-700">
+                      El paquete está vinculado a este terapeuta
+                    </p>
+                  )}
+                  {psicologoVinculadoId && formCita.psicologoId && formCita.psicologoId !== psicologoVinculadoId && (
+                    <div className="mt-2 rounded-card-sm border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                      El paquete de este paciente está vinculado al Dr(a). {nombrePsicologoVinculado}. Para cambiar de terapeuta, solicite una transferencia de caso
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -169,7 +169,9 @@ export default function PortalPaciente() {
       return;
     }
 
-    if (esSlotOcupado(formCita.psicologoId, formCita.fecha, bloque.inicio)) {
+    const psicologoFinalId = psicologoVinculadoId || formCita.psicologoId;
+
+    if (esSlotOcupado(psicologoFinalId, formCita.fecha, bloque.inicio)) {
       toast.warning('El horario seleccionado ya se encuentra ocupado con ese psicólogo.');
       return;
     }
@@ -179,11 +181,10 @@ export default function PortalPaciente() {
         method: 'POST',
         body: JSON.stringify({
           pacienteId: pacienteInfo.id,
-          psicologoId: formCita.psicologoId,
+          psicologoId: psicologoFinalId,
           fechaHoraInicio,
           fechaHoraFin,
           motivoConsulta: formCita.motivoConsulta || 'Consulta terapéutica',
-          tipoCita: 'TERAPIA',
         }),
       });
       toast.success('¡Cita agendada con éxito en el sistema!');
@@ -198,12 +199,14 @@ export default function PortalPaciente() {
   const paquetes: any[] = pacienteInfo?.paquetesPaciente ?? [];
   const citas: any[] = pacienteInfo?.citas ?? [];
 
-  const tienePaqueteActivo = paquetes.some(
+  const paqueteActivo = paquetes.find(
     (p) =>
       p.estado === 'ACTIVO' &&
       p.sesionesRestantes > 0 &&
       (!p.fechaExpiracion || new Date(p.fechaExpiracion) >= new Date()),
   );
+  const tienePaqueteActivo = Boolean(paqueteActivo);
+  const psicologoVinculadoId = paqueteActivo?.psicologoId || '';
 
   return (
     <div className="min-h-screen bg-axioma-50 font-sans text-axiomaText-ink antialiased selection:bg-axioma-200">
@@ -268,6 +271,10 @@ export default function PortalPaciente() {
                     toast.error('No cuentas con paquetes activos disponibles para agendar citas. Por favor, adquiera o renueve un paquete.');
                     return;
                   }
+                  setFormCita((prev) => ({
+                    ...prev,
+                    psicologoId: paqueteActivo?.psicologoId || prev.psicologoId,
+                  }));
                   setMostrarModalCita(true);
                 }}
                 disabled={!tienePaqueteActivo || usuario?.rol !== 'PACIENTE'}
@@ -465,6 +472,16 @@ export default function PortalPaciente() {
                 Horario de atención: Lun-Vie (9am a 6pm) y Sáb (9am a 1pm). Sesiones de 50 minutos.
               </p>
 
+              {paqueteActivo ? (
+                <div className="mt-3 rounded-card-sm border border-emerald-300 bg-emerald-50 p-3 text-xs font-medium leading-relaxed text-emerald-900">
+                  🎟️ Tienes un paquete activo: {paqueteActivo.paquete?.nombre || 'Paquete terapéutico'} - {paqueteActivo.sesionesRestantes} sesiones restantes. Al agendar esta cita, se consumirá 1 sesión al momento de la atención.
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-axiomaText-soft">
+                  Estás agendando una sesión individual (pago en recepción)
+                </p>
+              )}
+
               <div className="mt-3 rounded-card-sm border border-axioma-200 bg-axioma-50 p-3 text-xs leading-relaxed text-axiomaText-body">
                 <span className="font-semibold text-axiomaText-ink">Nota clínica importante:</span> Tu primera cita corresponde a una sesión de <span className="font-semibold text-axiomaText-ink">EVALUACIÓN</span> inicial, donde el especialista definirá tu plan terapéutico personalizado.
               </div>
@@ -489,7 +506,11 @@ export default function PortalPaciente() {
                       setFormCita({
                         ...formCita,
                         motivoConsulta: nuevoMotivo,
-                        psicologoId: psicologoSugerido ? psicologoSugerido.id : formCita.psicologoId,
+                        psicologoId: psicologoVinculadoId
+                          ? psicologoVinculadoId
+                          : psicologoSugerido
+                            ? psicologoSugerido.id
+                            : formCita.psicologoId,
                       });
                     }}
                     className={input}
@@ -509,9 +530,10 @@ export default function PortalPaciente() {
                   <select
                     id="psicologoId"
                     required
-                    value={formCita.psicologoId}
+                    disabled={Boolean(psicologoVinculadoId)}
+                    value={psicologoVinculadoId || formCita.psicologoId}
                     onChange={(e) => setFormCita({ ...formCita, psicologoId: e.target.value })}
-                    className={input}
+                    className={`${input} ${psicologoVinculadoId ? 'bg-axioma-50 cursor-not-allowed opacity-90' : ''}`}
                   >
                     <option value="">Seleccione terapeuta...</option>
                     {psicologos.map((p) => (
@@ -520,6 +542,12 @@ export default function PortalPaciente() {
                       </option>
                     ))}
                   </select>
+
+                  {psicologoVinculadoId && (
+                    <p className="mt-1.5 text-xs font-medium text-emerald-700">
+                      Tu paquete está vinculado a este terapeuta. Para cambiar, contacta a recepción
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -544,7 +572,7 @@ export default function PortalPaciente() {
                       className={input}
                     >
                       {generarHorariosDisponibles(formCita.fecha).map((h, i) => {
-                        const ocupado = esSlotOcupado(formCita.psicologoId, formCita.fecha, h.inicio);
+                        const ocupado = esSlotOcupado(psicologoVinculadoId || formCita.psicologoId, formCita.fecha, h.inicio);
                         return (
                           <option key={i} value={i} disabled={ocupado}>
                             {h.etiqueta} {ocupado ? '— [OCUPADO]' : ''}

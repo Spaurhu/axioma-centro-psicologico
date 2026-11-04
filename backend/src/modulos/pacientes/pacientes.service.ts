@@ -55,7 +55,7 @@ export class PacientesService {
         : undefined,
       include: {
         paquetesPaciente: {
-          include: { paquete: true },
+          include: { paquete: true, psicologo: true },
           orderBy: { fechaCompra: 'desc' },
         },
       },
@@ -68,7 +68,7 @@ export class PacientesService {
       where: { dni },
       include: {
         paquetesPaciente: {
-          include: { paquete: true },
+          include: { paquete: true, psicologo: true },
         },
         citas: {
           include: { psicologo: true },
@@ -90,7 +90,7 @@ export class PacientesService {
       where: { id },
       include: {
         paquetesPaciente: {
-          include: { paquete: true },
+          include: { paquete: true, psicologo: true },
         },
         citas: {
           include: { psicologo: true },

@@ -252,9 +252,128 @@ export class CitasService {
         paciente: true,
         psicologo: true,
         paquetePaciente: { include: { paquete: true } },
+        evolucionClinica: true,
       },
       orderBy: { fechaHoraInicio: 'asc' },
     });
+  }
+
+  async obtenerEstadisticasPsicologo(user?: any, psicologoIdQuery?: string) {
+    const targetPsicologoId =
+      user?.rol === Rol.PSICOLOGO && user?.psicologo?.id
+        ? user.psicologo.id
+        : psicologoIdQuery || undefined;
+
+    const whereClause = targetPsicologoId ? { psicologoId: targetPsicologoId } : {};
+
+    const todasCitas = await this.prisma.cita.findMany({
+      where: whereClause,
+      include: {
+        paciente: true,
+        psicologo: true,
+        paquetePaciente: { include: { paquete: true } },
+        evolucionClinica: true,
+      },
+      orderBy: { fechaHoraInicio: 'desc' },
+    });
+
+    const ahora = new Date();
+    const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1, 0, 0, 0, 0);
+    const finMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const sesionesAtendidasMes = todasCitas.filter((c) => {
+      const f = new Date(c.fechaHoraInicio);
+      return c.estado === EstadoCita.ATENDIDA && f >= inicioMes && f <= finMes;
+    }).length;
+
+    const pacientesUnicosMap = new Map<string, any>();
+    for (const c of todasCitas) {
+      if (!c.paciente) continue;
+      if (!pacientesUnicosMap.has(c.pacienteId)) {
+        pacientesUnicosMap.set(c.pacienteId, {
+          paciente: c.paciente,
+          totalCitas: 0,
+          citasAtendidas: 0,
+          inasistencias: 0,
+          ultimaCita: c.fechaHoraInicio,
+          citas: [],
+          notasSoap: [],
+        });
+      }
+      const item = pacientesUnicosMap.get(c.pacienteId);
+      item.totalCitas += 1;
+      if (c.estado === EstadoCita.ATENDIDA) item.citasAtendidas += 1;
+      if (c.estado === EstadoCita.NO_ASISTIO) item.inasistencias += 1;
+      item.citas.push(c);
+      if (c.evolucionClinica) {
+        item.notasSoap.push({
+          ...c.evolucionClinica,
+          cita: c,
+          fechaHoraInicio: c.fechaHoraInicio,
+          fechaHoraFin: c.fechaHoraFin,
+          tipoCita: c.tipoCita,
+        });
+      }
+    }
+
+    const pacientesActivos = pacientesUnicosMap.size;
+    const totalInasistencias = todasCitas.filter((c) => c.estado === EstadoCita.NO_ASISTIO).length;
+    const totalAtendidas = todasCitas.filter((c) => c.estado === EstadoCita.ATENDIDA).length;
+    const baseTasa = totalAtendidas + totalInasistencias;
+    const tasaInasistencia = baseTasa > 0 ? Math.round((totalInasistencias / baseTasa) * 100) : 0;
+
+    const sesionesPorSemana: {
+      etiqueta: string;
+      rango: string;
+      atendidas: number;
+      programadas: number;
+      noAsistio: number;
+      total: number;
+    }[] = [];
+
+    const diaActual = ahora.getDay();
+    const diffLunes = ahora.getDate() - diaActual + (diaActual === 0 ? -6 : 1);
+    const lunesActual = new Date(ahora.getFullYear(), ahora.getMonth(), diffLunes, 0, 0, 0, 0);
+
+    for (let i = 3; i >= 0; i--) {
+      const inicioSem = new Date(lunesActual);
+      inicioSem.setDate(inicioSem.getDate() - i * 7);
+      const finSem = new Date(inicioSem);
+      finSem.setDate(finSem.getDate() + 6);
+      finSem.setHours(23, 59, 59, 999);
+
+      const citasSem = todasCitas.filter((c) => {
+        const f = new Date(c.fechaHoraInicio);
+        return f >= inicioSem && f <= finSem;
+      });
+
+      const atendidasSem = citasSem.filter((c) => c.estado === EstadoCita.ATENDIDA).length;
+      const programadasSem = citasSem.filter(
+        (c) => c.estado === EstadoCita.PROGRAMADA || c.estado === EstadoCita.CONFIRMADA,
+      ).length;
+      const noAsistioSem = citasSem.filter((c) => c.estado === EstadoCita.NO_ASISTIO).length;
+      const rangoStr = `${inicioSem.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })} - ${finSem.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}`;
+
+      sesionesPorSemana.push({
+        etiqueta: i === 0 ? 'Esta semana' : `Hace ${i} sem.`,
+        rango: rangoStr,
+        atendidas: atendidasSem,
+        programadas: programadasSem,
+        noAsistio: noAsistioSem,
+        total: atendidasSem + programadasSem + noAsistioSem,
+      });
+    }
+
+    return {
+      sesionesAtendidasMes,
+      pacientesActivos,
+      tasaInasistencia,
+      totalInasistencias,
+      totalAtendidas,
+      totalCitas: todasCitas.length,
+      sesionesPorSemana,
+      pacientes: Array.from(pacientesUnicosMap.values()),
+    };
   }
 
   async obtenerPorId(id: string, user?: any) {
