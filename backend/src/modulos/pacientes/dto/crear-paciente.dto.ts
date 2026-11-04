@@ -1,9 +1,10 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, Length } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, Length, Matches } from 'class-validator';
 
 export class CrearPacienteDto {
   @IsString()
   @IsNotEmpty({ message: 'El DNI es obligatorio' })
-  @Length(8, 12, { message: 'El DNI debe tener entre 8 y 12 caracteres' })
+  @Length(8, 8, { message: 'El DNI debe tener 8 dígitos numéricos' })
+  @Matches(/^\d{8}$/, { message: 'El DNI debe tener 8 dígitos numéricos' })
   dni: string;
 
   @IsString()
@@ -16,11 +17,13 @@ export class CrearPacienteDto {
 
   @IsOptional()
   @IsString()
+  @Length(9, 9, { message: 'El teléfono debe tener 9 dígitos' })
+  @Matches(/^\d{9}$/, { message: 'El teléfono debe tener 9 dígitos' })
   telefono?: string;
 
-  @IsOptional()
+  @IsNotEmpty({ message: 'El correo electrónico es obligatorio' })
   @IsEmail({}, { message: 'El correo debe ser válido' })
-  correo?: string;
+  correo: string;
 
   @IsOptional()
   @IsString()

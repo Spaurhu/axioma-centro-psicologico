@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, Length, MinLength, IsNumber, IsArray } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, Length, Matches, MinLength, IsNumber, IsArray } from 'class-validator';
 
 export class CrearPsicologoDto {
   @IsEmail({}, { message: 'El correo debe ser válido' })
@@ -12,7 +12,8 @@ export class CrearPsicologoDto {
 
   @IsString()
   @IsNotEmpty()
-  @Length(8, 12, { message: 'El DNI debe tener entre 8 y 12 caracteres' })
+  @Length(8, 8, { message: 'El DNI debe tener 8 dígitos numéricos' })
+  @Matches(/^\d{8}$/, { message: 'El DNI debe tener 8 dígitos numéricos' })
   dni: string;
 
   @IsString()
@@ -25,6 +26,8 @@ export class CrearPsicologoDto {
 
   @IsOptional()
   @IsString()
+  @Length(9, 9, { message: 'El teléfono debe tener 9 dígitos' })
+  @Matches(/^\d{9}$/, { message: 'El teléfono debe tener 9 dígitos' })
   telefono?: string;
 
   @IsOptional()

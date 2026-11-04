@@ -1,9 +1,11 @@
+import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { foco, focoClaro } from '@/lib/ui';
 
 interface LogoAxiomaProps {
-    subtitulo?: string;
+    /** Acepta texto o JSX (p. ej. con <br /> para partirlo en dos líneas) */
+    subtitulo?: ReactNode;
     /** true cuando va sobre fondo burdeos */
     oscuro?: boolean;
 }

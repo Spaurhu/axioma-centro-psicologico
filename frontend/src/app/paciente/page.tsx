@@ -20,6 +20,16 @@ const fondosPaquete = [
   'bg-white border-axioma-200/70',
 ];
 
+const MOTIVOS_CONSULTA = [
+  { valor: 'Ansiedad y manejo de estrés', especialidadSugerida: 'Psicoterapia Cognitivo-Conductual' },
+  { valor: 'Depresión y estado de ánimo', especialidadSugerida: 'Psicoterapia Cognitivo-Conductual' },
+  { valor: 'Terapia de Pareja', especialidadSugerida: 'Terapia Familiar y de Pareja' },
+  { valor: 'Terapia Infantil y Adolescente', especialidadSugerida: 'Terapia Infantil y Adolescente' },
+  { valor: 'Dinámica y conflictos familiares', especialidadSugerida: 'Terapia Sistémica' },
+  { valor: 'Evaluación Psicológica integral', especialidadSugerida: 'Evaluación Psicológica' },
+  { valor: 'Orientación y bienestar emocional', especialidadSugerida: 'Psicología Clínica General' },
+];
+
 // Generar bloques de horario de consulta
 const generarHorariosDisponibles = (fechaStr: string) => {
   if (!fechaStr) return [];
@@ -61,7 +71,7 @@ export default function PortalPaciente() {
     psicologoId: '',
     fecha: hoyStr,
     horarioIndex: '0',
-    motivoConsulta: '',
+    motivoConsulta: MOTIVOS_CONSULTA[0].valor,
   });
 
   useEffect(() => {
@@ -178,7 +188,7 @@ export default function PortalPaciente() {
       });
       toast.success('¡Cita agendada con éxito en el sistema!');
       setMostrarModalCita(false);
-      setFormCita({ psicologoId: '', fecha: hoyStr, horarioIndex: '0', motivoConsulta: '' });
+      setFormCita({ psicologoId: '', fecha: hoyStr, horarioIndex: '0', motivoConsulta: MOTIVOS_CONSULTA[0].valor });
       cargarDatosPaciente(usuario);
     } catch (err: any) {
       toast.error(err.message || 'Error al agendar cita');
@@ -455,10 +465,46 @@ export default function PortalPaciente() {
                 Horario de atención: Lun-Vie (9am a 6pm) y Sáb (9am a 1pm). Sesiones de 50 minutos.
               </p>
 
-              <form onSubmit={handleAgendar} className="mt-6 space-y-4">
+              <div className="mt-3 rounded-card-sm border border-axioma-200 bg-axioma-50 p-3 text-xs leading-relaxed text-axiomaText-body">
+                <span className="font-semibold text-axiomaText-ink">Nota clínica importante:</span> Tu primera cita corresponde a una sesión de <span className="font-semibold text-axiomaText-ink">EVALUACIÓN</span> inicial, donde el especialista definirá tu plan terapéutico personalizado.
+              </div>
+
+              <form onSubmit={handleAgendar} className="mt-5 space-y-4">
+                <div>
+                  <label htmlFor="motivo" className={label}>
+                    1. ¿Cuál es tu motivo principal de consulta?
+                  </label>
+                  <select
+                    id="motivo"
+                    required
+                    value={formCita.motivoConsulta}
+                    onChange={(e) => {
+                      const nuevoMotivo = e.target.value;
+                      const configMotivo = MOTIVOS_CONSULTA.find((m) => m.valor === nuevoMotivo);
+                      const psicologoSugerido = configMotivo
+                        ? psicologos.find((p) =>
+                            p.especialidad?.toLowerCase().includes(configMotivo.especialidadSugerida.toLowerCase())
+                          )
+                        : null;
+                      setFormCita({
+                        ...formCita,
+                        motivoConsulta: nuevoMotivo,
+                        psicologoId: psicologoSugerido ? psicologoSugerido.id : formCita.psicologoId,
+                      });
+                    }}
+                    className={input}
+                  >
+                    {MOTIVOS_CONSULTA.map((m) => (
+                      <option key={m.valor} value={m.valor}>
+                        {m.valor}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label htmlFor="psicologoId" className={label}>
-                    Psicólogo especialista
+                    2. Psicólogo especialista
                   </label>
                   <select
                     id="psicologoId"
@@ -507,20 +553,6 @@ export default function PortalPaciente() {
                       })}
                     </select>
                   </div>
-                </div>
-
-                <div>
-                  <label htmlFor="motivo" className={label}>
-                    Motivo de consulta (opcional)
-                  </label>
-                  <input
-                    id="motivo"
-                    type="text"
-                    placeholder="Ej. Manejo de estrés, ansiedad o temas personales"
-                    value={formCita.motivoConsulta}
-                    onChange={(e) => setFormCita({ ...formCita, motivoConsulta: e.target.value })}
-                    className={input}
-                  />
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">

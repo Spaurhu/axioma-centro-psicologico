@@ -23,6 +23,15 @@ const fondosPaquete = [
   'bg-white border-axioma-200/70',
 ];
 
+const ESPECIALIDADES_CLINICAS = [
+  'Psicoterapia Cognitivo-Conductual',
+  'Terapia Familiar y de Pareja',
+  'Terapia Infantil y Adolescente',
+  'Terapia Sistémica',
+  'Evaluación Psicológica',
+  'Psicología Clínica General',
+];
+
 // Generar bloques de horario de consulta
 const generarHorariosDisponibles = (fechaStr: string) => {
   if (!fechaStr) return [];
@@ -73,6 +82,7 @@ export default function PanelStaff() {
   const [citaSeleccionadaParaNota, setCitaSeleccionadaParaNota] = useState<any>(null);
 
   const [mostrarModalPsicologo, setMostrarModalPsicologo] = useState(false);
+  const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
   const [mostrarModalEditarPaciente, setMostrarModalEditarPaciente] = useState(false);
   const [pacienteSeleccionadoParaEditar, setPacienteSeleccionadoParaEditar] = useState<any>(null);
 
@@ -176,6 +186,15 @@ export default function PanelStaff() {
     horaFinLV: '18:00',
     horaInicioSabado: '09:00',
     horaFinSabado: '13:00',
+  });
+
+  const [formNuevoPaciente, setFormNuevoPaciente] = useState({
+    dni: '',
+    nombres: '',
+    apellidos: '',
+    telefono: '',
+    correo: '',
+    direccion: '',
   });
 
   const [formEditarPaciente, setFormEditarPaciente] = useState({
@@ -587,6 +606,14 @@ export default function PanelStaff() {
   // --- REGISTRO DE PSICÓLOGO (HU-02) ---
   const handleCrearPsicologo = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!/^[0-9]{8}$/.test(formPsicologo.dni)) {
+      toast.error('El DNI debe tener 8 dígitos numéricos');
+      return;
+    }
+    if (!/^[0-9]{9}$/.test(formPsicologo.telefono)) {
+      toast.error('El teléfono debe tener 9 dígitos');
+      return;
+    }
     try {
       await apiFetch('/psicologos', {
         method: 'POST',
@@ -617,6 +644,38 @@ export default function PanelStaff() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar psicólogo');
+    }
+  };
+
+  // --- REGISTRAR NUEVO PACIENTE ---
+  const handleCrearPaciente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^[0-9]{8}$/.test(formNuevoPaciente.dni)) {
+      toast.error('El DNI debe tener 8 dígitos numéricos');
+      return;
+    }
+    if (!/^[0-9]{9}$/.test(formNuevoPaciente.telefono)) {
+      toast.error('El teléfono debe tener 9 dígitos');
+      return;
+    }
+    try {
+      await apiFetch('/pacientes', {
+        method: 'POST',
+        body: JSON.stringify(formNuevoPaciente),
+      });
+      toast.success('Paciente registrado exitosamente.');
+      setMostrarModalNuevoPaciente(false);
+      setFormNuevoPaciente({
+        dni: '',
+        nombres: '',
+        apellidos: '',
+        telefono: '',
+        correo: '',
+        direccion: '',
+      });
+      cargarDatos();
+    } catch (err: any) {
+      toast.error(err.message || 'Error al registrar paciente');
     }
   };
 
@@ -891,6 +950,14 @@ export default function PanelStaff() {
                 <button onClick={() => setMostrarModalPsicologo(true)} className={`${btnPrimary} ${tamMd}`}>
                   <Plus className="h-4 w-4" />
                   <span>Registrar psicólogo</span>
+                </button>
+              )}
+
+              {/* Botón Nuevo Paciente */}
+              {esAdmin && tabActiva === 'pacientes' && (
+                <button onClick={() => setMostrarModalNuevoPaciente(true)} className={`${btnPrimary} ${tamMd}`}>
+                  <Plus className="h-4 w-4" />
+                  <span>Nuevo paciente</span>
                 </button>
               )}
 
@@ -2030,7 +2097,7 @@ export default function PanelStaff() {
       {mostrarModalPsicologo && (
         <div className={modalOverlay}>
           <div className={modalWrap}>
-            <div className={`${modalCard} max-w-lg`} role="dialog" aria-modal="true">
+            <div className={`${modalCard} max-w-xl`} role="dialog" aria-modal="true">
               <h3 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink">
                 Registrar nuevo psicólogo
               </h3>
@@ -2039,20 +2106,43 @@ export default function PanelStaff() {
               </p>
 
               <form onSubmit={handleCrearPsicologo} className="mt-5 space-y-4">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-3">
                   <div>
-                    <label className={label}>DNI</label>
+                    <label className={`${label} whitespace-nowrap`}>DNI (8 dígitos)</label>
                     <input
                       type="text"
                       required
                       maxLength={8}
+                      pattern="[0-9]{8}"
+                      inputMode="numeric"
+                      placeholder="74839201"
                       value={formPsicologo.dni}
                       onChange={(e) => setFormPsicologo({ ...formPsicologo, dni: e.target.value })}
                       className={input}
                     />
+                    {formPsicologo.dni.length > 0 && !/^[0-9]{8}$/.test(formPsicologo.dni) && (
+                      <p className="mt-1 text-xs font-medium text-red-600">El DNI debe tener 8 dígitos numéricos</p>
+                    )}
                   </div>
                   <div>
-                    <label className={label}>N° Colegiatura (C.Ps.P.)</label>
+                    <label className={`${label} whitespace-nowrap`}>Teléfono (9 dígitos)</label>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={9}
+                      pattern="[0-9]{9}"
+                      inputMode="numeric"
+                      placeholder="987654321"
+                      value={formPsicologo.telefono}
+                      onChange={(e) => setFormPsicologo({ ...formPsicologo, telefono: e.target.value })}
+                      className={input}
+                    />
+                    {formPsicologo.telefono.length > 0 && !/^[0-9]{9}$/.test(formPsicologo.telefono) && (
+                      <p className="mt-1 text-xs font-medium text-red-600">El teléfono debe tener 9 dígitos</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className={`${label} whitespace-nowrap`}>N° Colegiatura</label>
                     <input
                       type="text"
                       required
@@ -2110,15 +2200,21 @@ export default function PanelStaff() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className={label}>Especialidad</label>
-                    <input
-                      type="text"
+                    <select
+                      required
                       value={formPsicologo.especialidad}
                       onChange={(e) => setFormPsicologo({ ...formPsicologo, especialidad: e.target.value })}
                       className={input}
-                    />
+                    >
+                      {ESPECIALIDADES_CLINICAS.map((esp) => (
+                        <option key={esp} value={esp}>
+                          {esp}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className={label}>Tarifa por sesión (S/.)</label>
@@ -2200,6 +2296,117 @@ export default function PanelStaff() {
       )}
 
       {/* ========================================================================= */}
+      {/* MODAL 4B: NUEVO PACIENTE */}
+      {/* ========================================================================= */}
+      {mostrarModalNuevoPaciente && (
+        <div className={modalOverlay}>
+          <div className={modalWrap}>
+            <div className={`${modalCard} max-w-lg`} role="dialog" aria-modal="true">
+              <h3 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink">
+                Registrar nuevo paciente
+              </h3>
+              <p className="mt-1 text-sm text-axiomaText-soft">
+                Ingresa los datos personales y de contacto del paciente.
+              </p>
+
+              <form onSubmit={handleCrearPaciente} className="mt-5 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={label}>DNI (8 dígitos)</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={8}
+                      pattern="[0-9]{8}"
+                      inputMode="numeric"
+                      placeholder="74839201"
+                      value={formNuevoPaciente.dni}
+                      onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, dni: e.target.value })}
+                      className={input}
+                    />
+                    {formNuevoPaciente.dni.length > 0 && !/^[0-9]{8}$/.test(formNuevoPaciente.dni) && (
+                      <p className="mt-1 text-xs font-medium text-red-600">El DNI debe tener 8 dígitos numéricos</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className={label}>Teléfono (9 dígitos)</label>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={9}
+                      pattern="[0-9]{9}"
+                      inputMode="numeric"
+                      placeholder="987654321"
+                      value={formNuevoPaciente.telefono}
+                      onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, telefono: e.target.value })}
+                      className={input}
+                    />
+                    {formNuevoPaciente.telefono.length > 0 && !/^[0-9]{9}$/.test(formNuevoPaciente.telefono) && (
+                      <p className="mt-1 text-xs font-medium text-red-600">El teléfono debe tener 9 dígitos</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={label}>Nombres</label>
+                    <input
+                      type="text"
+                      required
+                      value={formNuevoPaciente.nombres}
+                      onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, nombres: e.target.value })}
+                      className={input}
+                    />
+                  </div>
+                  <div>
+                    <label className={label}>Apellidos</label>
+                    <input
+                      type="text"
+                      required
+                      value={formNuevoPaciente.apellidos}
+                      onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, apellidos: e.target.value })}
+                      className={input}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={label}>Correo electrónico</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="paciente@correo.com"
+                    value={formNuevoPaciente.correo}
+                    onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, correo: e.target.value })}
+                    className={input}
+                  />
+                </div>
+
+                <div>
+                  <label className={label}>Dirección</label>
+                  <input
+                    type="text"
+                    value={formNuevoPaciente.direccion}
+                    onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, direccion: e.target.value })}
+                    className={input}
+                  />
+                </div>
+
+                <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
+                  <button type="button" onClick={() => setMostrarModalNuevoPaciente(false)} className={`${btnSecondary} ${tamMd}`}>
+                    Cancelar
+                  </button>
+                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
+                    Guardar paciente
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* MODAL 5: MODIFICAR DATOS DEL PACIENTE (HU-06) */}
       {/* ========================================================================= */}
       {mostrarModalEditarPaciente && (
@@ -2220,19 +2427,31 @@ export default function PanelStaff() {
                     <input
                       type="text"
                       required
+                      maxLength={8}
+                      pattern="[0-9]{8}"
+                      inputMode="numeric"
                       value={formEditarPaciente.dni}
                       onChange={(e) => setFormEditarPaciente({ ...formEditarPaciente, dni: e.target.value })}
                       className={input}
                     />
+                    {formEditarPaciente.dni.length > 0 && !/^[0-9]{8}$/.test(formEditarPaciente.dni) && (
+                      <p className="mt-1 text-xs font-medium text-red-600">El DNI debe tener 8 dígitos numéricos</p>
+                    )}
                   </div>
                   <div>
                     <label className={label}>Teléfono</label>
                     <input
-                      type="text"
+                      type="tel"
+                      maxLength={9}
+                      pattern="[0-9]{9}"
+                      inputMode="numeric"
                       value={formEditarPaciente.telefono}
                       onChange={(e) => setFormEditarPaciente({ ...formEditarPaciente, telefono: e.target.value })}
                       className={input}
                     />
+                    {formEditarPaciente.telefono.length > 0 && !/^[0-9]{9}$/.test(formEditarPaciente.telefono) && (
+                      <p className="mt-1 text-xs font-medium text-red-600">El teléfono debe tener 9 dígitos</p>
+                    )}
                   </div>
                 </div>
 

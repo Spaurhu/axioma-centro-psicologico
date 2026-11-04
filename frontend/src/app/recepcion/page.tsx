@@ -69,7 +69,16 @@ export default function PanelRecepcion() {
   const [mostrarModalReprogramar, setMostrarModalReprogramar] = useState(false);
   const [citaSeleccionadaParaReprog, setCitaSeleccionadaParaReprog] = useState<any>(null);
 
+  const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
   const [mostrarModalEditarPaciente, setMostrarModalEditarPaciente] = useState(false);
+  const [formNuevoPaciente, setFormNuevoPaciente] = useState({
+    dni: '',
+    nombres: '',
+    apellidos: '',
+    telefono: '',
+    correo: '',
+    direccion: '',
+  });
   const [pacienteSeleccionadoParaEditar, setPacienteSeleccionadoParaEditar] = useState<any>(null);
 
   const [mostrarModalAsignarPaquete, setMostrarModalAsignarPaquete] = useState(false);
@@ -353,6 +362,38 @@ export default function PanelRecepcion() {
     }
   };
 
+  // --- REGISTRAR NUEVO PACIENTE ---
+  const handleCrearPaciente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^[0-9]{8}$/.test(formNuevoPaciente.dni)) {
+      toast.error('El DNI debe tener 8 dígitos numéricos');
+      return;
+    }
+    if (!/^[0-9]{9}$/.test(formNuevoPaciente.telefono)) {
+      toast.error('El teléfono debe tener 9 dígitos');
+      return;
+    }
+    try {
+      await apiFetch('/pacientes', {
+        method: 'POST',
+        body: JSON.stringify(formNuevoPaciente),
+      });
+      toast.success('Paciente registrado exitosamente.');
+      setMostrarModalNuevoPaciente(false);
+      setFormNuevoPaciente({
+        dni: '',
+        nombres: '',
+        apellidos: '',
+        telefono: '',
+        correo: '',
+        direccion: '',
+      });
+      cargarDatos();
+    } catch (err: any) {
+      toast.error(err.message || 'Error al registrar paciente');
+    }
+  };
+
   // --- MODIFICAR DATOS DEL PACIENTE (HU-06) ---
   const abrirModalEditarPaciente = (paciente: any) => {
     setPacienteSeleccionadoParaEditar(paciente);
@@ -561,6 +602,13 @@ export default function PanelRecepcion() {
                 <button onClick={() => setMostrarModalCita(true)} className={`${btnPrimary} ${tamMd}`}>
                   <Plus className="h-4 w-4" />
                   <span>Agendar cita</span>
+                </button>
+              )}
+
+              {tabActiva === 'pacientes' && (
+                <button onClick={() => setMostrarModalNuevoPaciente(true)} className={`${btnPrimary} ${tamMd}`}>
+                  <Plus className="h-4 w-4" />
+                  <span>Nuevo paciente</span>
                 </button>
               )}
             </div>
@@ -1362,6 +1410,117 @@ export default function PanelRecepcion() {
       )}
 
       {/* ========================================================================= */}
+      {/* MODAL 2B: NUEVO PACIENTE */}
+      {/* ========================================================================= */}
+      {mostrarModalNuevoPaciente && (
+        <div className={modalOverlay}>
+          <div className={modalWrap}>
+            <div className={`${modalCard} max-w-lg`} role="dialog" aria-modal="true">
+              <h3 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink">
+                Registrar nuevo paciente
+              </h3>
+              <p className="mt-1 text-sm text-axiomaText-soft">
+                Ingresa los datos personales y de contacto del paciente.
+              </p>
+
+              <form onSubmit={handleCrearPaciente} className="mt-5 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={label}>DNI (8 dígitos)</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={8}
+                      pattern="[0-9]{8}"
+                      inputMode="numeric"
+                      placeholder="74839201"
+                      value={formNuevoPaciente.dni}
+                      onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, dni: e.target.value })}
+                      className={input}
+                    />
+                    {formNuevoPaciente.dni.length > 0 && !/^[0-9]{8}$/.test(formNuevoPaciente.dni) && (
+                      <p className="mt-1 text-xs font-medium text-red-600">El DNI debe tener 8 dígitos numéricos</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className={label}>Teléfono (9 dígitos)</label>
+                    <input
+                      type="tel"
+                      required
+                      maxLength={9}
+                      pattern="[0-9]{9}"
+                      inputMode="numeric"
+                      placeholder="987654321"
+                      value={formNuevoPaciente.telefono}
+                      onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, telefono: e.target.value })}
+                      className={input}
+                    />
+                    {formNuevoPaciente.telefono.length > 0 && !/^[0-9]{9}$/.test(formNuevoPaciente.telefono) && (
+                      <p className="mt-1 text-xs font-medium text-red-600">El teléfono debe tener 9 dígitos</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={label}>Nombres</label>
+                    <input
+                      type="text"
+                      required
+                      value={formNuevoPaciente.nombres}
+                      onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, nombres: e.target.value })}
+                      className={input}
+                    />
+                  </div>
+                  <div>
+                    <label className={label}>Apellidos</label>
+                    <input
+                      type="text"
+                      required
+                      value={formNuevoPaciente.apellidos}
+                      onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, apellidos: e.target.value })}
+                      className={input}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={label}>Correo electrónico</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="paciente@correo.com"
+                    value={formNuevoPaciente.correo}
+                    onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, correo: e.target.value })}
+                    className={input}
+                  />
+                </div>
+
+                <div>
+                  <label className={label}>Dirección</label>
+                  <input
+                    type="text"
+                    value={formNuevoPaciente.direccion}
+                    onChange={(e) => setFormNuevoPaciente({ ...formNuevoPaciente, direccion: e.target.value })}
+                    className={input}
+                  />
+                </div>
+
+                <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
+                  <button type="button" onClick={() => setMostrarModalNuevoPaciente(false)} className={`${btnSecondary} ${tamMd}`}>
+                    Cancelar
+                  </button>
+                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
+                    Guardar paciente
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* MODAL 3: MODIFICAR DATOS DEL PACIENTE (HU-06) */}
       {/* ========================================================================= */}
       {mostrarModalEditarPaciente && (
@@ -1382,6 +1541,8 @@ export default function PanelRecepcion() {
                     <input
                       type="text"
                       disabled
+                      maxLength={8}
+                      pattern="[0-9]{8}"
                       value={formEditarPaciente.dni}
                       className={`${input} bg-axioma-50 font-mono`}
                     />
@@ -1389,11 +1550,17 @@ export default function PanelRecepcion() {
                   <div>
                     <label className={label}>Teléfono</label>
                     <input
-                      type="text"
+                      type="tel"
+                      maxLength={9}
+                      pattern="[0-9]{9}"
+                      inputMode="numeric"
                       value={formEditarPaciente.telefono}
                       onChange={(e) => setFormEditarPaciente({ ...formEditarPaciente, telefono: e.target.value })}
                       className={input}
                     />
+                    {formEditarPaciente.telefono.length > 0 && !/^[0-9]{9}$/.test(formEditarPaciente.telefono) && (
+                      <p className="mt-1 text-xs font-medium text-red-600">El teléfono debe tener 9 dígitos</p>
+                    )}
                   </div>
                 </div>
 

@@ -26,8 +26,19 @@ export default function PaginaRegistro() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const dniInvalido = form.dni.length > 0 && !/^[0-9]{8}$/.test(form.dni);
+  const telefonoInvalido = form.telefono.length > 0 && !/^[0-9]{9}$/.test(form.telefono);
+
   const manejarEnvio = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!/^[0-9]{8}$/.test(form.dni)) {
+      setError('El DNI debe tener 8 dígitos numéricos');
+      return;
+    }
+    if (!/^[0-9]{9}$/.test(form.telefono)) {
+      setError('El teléfono debe tener 9 dígitos');
+      return;
+    }
     setError('');
     setCargando(true);
 
@@ -84,6 +95,7 @@ export default function PaginaRegistro() {
                 name="dni"
                 required
                 maxLength={8}
+                pattern="[0-9]{8}"
                 inputMode="numeric"
                 autoComplete="off"
                 value={form.dni}
@@ -91,6 +103,9 @@ export default function PaginaRegistro() {
                 placeholder="74839201"
                 className={input}
               />
+              {dniInvalido && (
+                <p className="mt-1 text-xs font-medium text-red-600">El DNI debe tener 8 dígitos numéricos</p>
+              )}
             </div>
             <div>
               <label htmlFor="telefono" className={label}>
@@ -101,12 +116,18 @@ export default function PaginaRegistro() {
                 type="tel"
                 name="telefono"
                 required
+                maxLength={9}
+                pattern="[0-9]{9}"
+                inputMode="numeric"
                 autoComplete="tel"
                 value={form.telefono}
                 onChange={manejarCambio}
                 placeholder="987654321"
                 className={input}
               />
+              {telefonoInvalido && (
+                <p className="mt-1 text-xs font-medium text-red-600">El teléfono debe tener 9 dígitos</p>
+              )}
             </div>
           </div>
 
