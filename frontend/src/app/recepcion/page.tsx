@@ -144,6 +144,7 @@ export default function PanelRecepcion() {
     fecha: hoyStr,
     horarioIndex: '0',
     motivoConsulta: '',
+    modalidad: 'PRESENCIAL' as 'PRESENCIAL' | 'VIRTUAL',
   });
 
   const [formReprogramar, setFormReprogramar] = useState({
@@ -314,6 +315,7 @@ export default function PanelRecepcion() {
           fechaHoraInicio,
           fechaHoraFin,
           motivoConsulta: formCita.motivoConsulta || 'Consulta terapéutica',
+          modalidad: formCita.modalidad,
         }),
       });
       toast.success('Cita agendada exitosamente.');
@@ -325,6 +327,7 @@ export default function PanelRecepcion() {
         fecha: hoyStr,
         horarioIndex: '0',
         motivoConsulta: '',
+        modalidad: 'PRESENCIAL',
       });
       cargarDatos();
     } catch (err: any) {
@@ -1412,6 +1415,46 @@ export default function PanelRecepcion() {
                     onChange={(e) => setFormCita({ ...formCita, motivoConsulta: e.target.value })}
                     className={input}
                   />
+                </div>
+
+                <div>
+                  <span className={label}>Modalidad de atención</span>
+                  <div className="mt-1.5 grid grid-cols-2 gap-3">
+                    <label
+                      className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all ${
+                        formCita.modalidad === 'PRESENCIAL'
+                          ? 'border-axioma-600 bg-axioma-50 text-axioma-800 ring-1 ring-axioma-600'
+                          : 'border-axioma-200 bg-white text-axioma-600 hover:bg-axioma-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="modalidadCitaRecepcion"
+                        value="PRESENCIAL"
+                        checked={formCita.modalidad === 'PRESENCIAL'}
+                        onChange={() => setFormCita({ ...formCita, modalidad: 'PRESENCIAL' })}
+                        className="sr-only"
+                      />
+                      🏢 Presencial
+                    </label>
+                    <label
+                      className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all ${
+                        formCita.modalidad === 'VIRTUAL'
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-600'
+                          : 'border-axioma-200 bg-white text-axioma-600 hover:bg-axioma-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="modalidadCitaRecepcion"
+                        value="VIRTUAL"
+                        checked={formCita.modalidad === 'VIRTUAL'}
+                        onChange={() => setFormCita({ ...formCita, modalidad: 'VIRTUAL' })}
+                        className="sr-only"
+                      />
+                      📹 Virtual (Google Meet)
+                    </label>
+                  </div>
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
