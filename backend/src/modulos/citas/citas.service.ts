@@ -190,6 +190,8 @@ export class CitasService {
 
     // 6. Guardar la cita con la predicción ML
     const modalidad = dto.modalidad === ModalidadCita.VIRTUAL ? ModalidadCita.VIRTUAL : ModalidadCita.PRESENCIAL;
+    const tipoCita =
+      dto.tipoCita ?? (tienePaqueteActivo ? TipoCita.TERAPIA : TipoCita.EVALUACION);
     const citaId = randomUUID();
     const enlaceVideo = modalidad === ModalidadCita.VIRTUAL
       ? `https://meet.google.com/axioma-${citaId.slice(0, 8)}-${Date.now()}`
@@ -198,6 +200,7 @@ export class CitasService {
     const citaCreada = await this.prisma.cita.create({
       data: {
         id: citaId,
+        tipoCita,
         modalidad,
         enlaceVideo,
         pacienteId: dto.pacienteId,

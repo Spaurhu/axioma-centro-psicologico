@@ -149,11 +149,6 @@ export default function PortalPaciente() {
     e.preventDefault();
     if (!pacienteInfo?.id) return;
 
-    if (!tienePaqueteActivo) {
-      toast.error('No cuentas con paquetes activos disponibles para agendar citas.');
-      return;
-    }
-
     const bloques = generarHorariosDisponibles(formCita.fecha);
     const bloque = bloques[parseInt(formCita.horarioIndex)] || bloques[0];
     if (!bloque) {
@@ -185,6 +180,7 @@ export default function PortalPaciente() {
           fechaHoraInicio,
           fechaHoraFin,
           motivoConsulta: formCita.motivoConsulta || 'Consulta terapéutica',
+          tipoCita: tienePaqueteActivo ? 'TERAPIA' : 'EVALUACION',
         }),
       });
       toast.success('¡Cita agendada con éxito en el sistema!');
@@ -267,18 +263,14 @@ export default function PortalPaciente() {
                     toast.error('Solo pacientes pueden agendar consultas desde este portal.');
                     return;
                   }
-                  if (!tienePaqueteActivo) {
-                    toast.error('No cuentas con paquetes activos disponibles para agendar citas. Por favor, adquiera o renueve un paquete.');
-                    return;
-                  }
                   setFormCita((prev) => ({
                     ...prev,
                     psicologoId: paqueteActivo?.psicologoId || prev.psicologoId,
                   }));
                   setMostrarModalCita(true);
                 }}
-                disabled={!tienePaqueteActivo || usuario?.rol !== 'PACIENTE'}
-                title={!tienePaqueteActivo ? 'Debes contar con un paquete activo y con sesiones disponibles para agendar citas' : 'Reservar nueva cita'}
+                disabled={usuario?.rol !== 'PACIENTE'}
+                title="Reservar nueva cita"
                 className={`${btnOnDark} ${tamMd} self-start sm:self-auto disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 <Plus className="h-4 w-4" />
@@ -288,7 +280,7 @@ export default function PortalPaciente() {
                 <span className="text-xs text-amber-200 font-medium">
                   {paquetes.some((p) => p.estado === 'VENCIDO' || (p.fechaExpiracion && new Date(p.fechaExpiracion) < new Date()))
                     ? 'Tu paquete ha expirado. Comunícate con recepción para renovar.'
-                    : 'Sin paquetes activos con saldo disponible'}
+                    : 'Disponible para agendar tu sesión de EVALUACIÓN inicial'}
                 </span>
               )}
             </div>
@@ -477,14 +469,10 @@ export default function PortalPaciente() {
                   🎟️ Tienes un paquete activo: {paqueteActivo.paquete?.nombre || 'Paquete terapéutico'} - {paqueteActivo.sesionesRestantes} sesiones restantes. Al agendar esta cita, se consumirá 1 sesión al momento de la atención.
                 </div>
               ) : (
-                <p className="mt-2 text-xs text-axiomaText-soft">
-                  Estás agendando una sesión individual (pago en recepción)
-                </p>
+                <div className="mt-3 rounded-card-sm border border-amber-300 bg-amber-50 p-3 text-xs font-medium leading-relaxed text-amber-900">
+                  📋 Esta será tu sesión de EVALUACIÓN inicial. El costo es de S/ 80 y se paga en recepción. El psicólogo definirá tu plan de tratamiento.
+                </div>
               )}
-
-              <div className="mt-3 rounded-card-sm border border-axioma-200 bg-axioma-50 p-3 text-xs leading-relaxed text-axiomaText-body">
-                <span className="font-semibold text-axiomaText-ink">Nota clínica importante:</span> Tu primera cita corresponde a una sesión de <span className="font-semibold text-axiomaText-ink">EVALUACIÓN</span> inicial, donde el especialista definirá tu plan terapéutico personalizado.
-              </div>
 
               <form onSubmit={handleAgendar} className="mt-5 space-y-4">
                 <div>
