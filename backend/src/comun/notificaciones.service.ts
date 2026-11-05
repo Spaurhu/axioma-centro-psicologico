@@ -1,41 +1,68 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class NotificacionesService {
   private readonly logger = new Logger(NotificacionesService.name);
-  private transporter: nodemailer.Transporter | null = null;
 
-  private obtenerTransporter(): nodemailer.Transporter | null {
-    const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
-    const port = Number(process.env.EMAIL_PORT) || 587;
-    const user = process.env.EMAIL_USER;
-    const pass = process.env.EMAIL_PASS;
+  private async enviarPorBrevo(params: {
+    correoDestino: string;
+    nombreDestino: string;
+    asunto: string;
+    htmlContenido: string;
+    etiquetaLog: string;
+  }): Promise<void> {
+    const apiKey = process.env.BREVO_API_KEY;
+    const remitenteEmail = process.env.EMAIL_USER || 'mpea.reyeshector@gmail.com';
+    const remitenteNombre = 'Centro Psicológico Axioma';
 
-    // Si falta la contraseña o es la plantilla de prueba, no falla la app
-    if (!user || !pass || pass === 'tu_contraseña_de_aplicacion_aqui') {
-      return null;
+    if (!apiKey || apiKey === 'tu_api_key_de_brevo_aqui') {
+      console.log(
+        `[SIMULACIÓN CORREO - ${params.etiquetaLog}] Correo no enviado a ${params.correoDestino} (Asunto: "${params.asunto}") porque BREVO_API_KEY no está configurada.`,
+      );
+      return;
     }
 
-    if (!this.transporter) {
-      try {
-        this.transporter = nodemailer.createTransport({
-          host,
-          port,
-          secure: port === 465, // true para 465, false para 587
-          auth: {
-            user,
-            pass,
+    try {
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+          'api-key': apiKey,
+        },
+        body: JSON.stringify({
+          sender: {
+            name: remitenteNombre,
+            email: remitenteEmail,
           },
-        });
-        this.logger.log('Transporter de Nodemailer inicializado correctamente.');
-      } catch (error: any) {
-        this.logger.warn(`Error al inicializar transporter de correo: ${error.message}`);
-        return null;
-      }
-    }
+          to: [
+            {
+              email: params.correoDestino,
+              name: params.nombreDestino,
+            },
+          ],
+          subject: params.asunto,
+          htmlContent: params.htmlContenido,
+        }),
+      });
 
-    return this.transporter;
+      const data: any = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.message || `HTTP ${response.status}`);
+      }
+
+      this.logger.log(
+        `[${params.etiquetaLog}] Correo enviado vía Brevo API a ${params.correoDestino}. ID: ${data?.messageId || 'OK'}`,
+      );
+    } catch (error: any) {
+      this.logger.error(
+        `[ERROR BREVO API - ${params.etiquetaLog}] No se pudo enviar el correo a ${params.correoDestino}: ${error.message}`,
+      );
+      console.log(
+        `[RESPALDO CONSOLA - ${params.etiquetaLog}] Destinatario: ${params.correoDestino} | Asunto: "${params.asunto}"`,
+      );
+    }
   }
 
   async enviarConfirmacion(paciente: any, cita: any) {
@@ -191,30 +218,16 @@ export class NotificacionesService {
         </div>
       </body>
       </html>
-    `;;
+    `;
 
-    // 4. Envío con nodemailer
-    const transporter = this.obtenerTransporter();
-    if (!transporter) {
-      console.log(
-        `[SIMULACIÓN CORREO] Correo no enviado a ${correoDestino} porque EMAIL_PASS aún tiene la plantilla por defecto o no está configurado.`,
-      );
-      return;
-    }
-
-    try {
-      const info = await transporter.sendMail({
-        from: `"Centro Psicológico Axioma" <${process.env.EMAIL_USER}>`,
-        to: correoDestino,
-        subject: `Confirmación de Cita - Centro Psicológico Axioma`,
-        html: htmlContenido,
-      });
-      this.logger.log(`[CORREO ENVIADO] Mensaje enviado a ${correoDestino}. ID: ${info.messageId}`);
-    } catch (error: any) {
-      this.logger.error(
-        `[ERROR CORREO] No se pudo enviar el correo a ${correoDestino}: ${error.message}`,
-      );
-    }
+    // 4. Envío mediante la API HTTP de Brevo
+    await this.enviarPorBrevo({
+      correoDestino,
+      nombreDestino: nombresPaciente,
+      asunto: 'Confirmación de Cita - Centro Psicológico Axioma',
+      htmlContenido,
+      etiquetaLog: 'CORREO ENVIADO',
+    });
   }
 
   async enviarConfirmacionObligatoria(paciente: any, cita: any) {
@@ -322,25 +335,13 @@ export class NotificacionesService {
       </html>
     `;
 
-    const transporter = this.obtenerTransporter();
-    if (!transporter) {
-      console.log(
-        `[SIMULACIÓN CORREO CONFIRMACIÓN OBLIGATORIA] Correo preparado para ${correoDestino} (Asunto: "⚠️ Confirma tu asistencia a tu cita del ${fechaCapitalizada}").`,
-      );
-      return;
-    }
-
-    try {
-      const info = await transporter.sendMail({
-        from: `"Centro Psicológico Axioma" <${process.env.EMAIL_USER}>`,
-        to: correoDestino,
-        subject: `⚠️ Confirma tu asistencia a tu cita del ${fechaCapitalizada}`,
-        html: htmlContenido,
-      });
-      this.logger.log(`[CORREO CONFIRMACIÓN OBLIGATORIA ENVIADO] Destino: ${correoDestino}. ID: ${info.messageId}`);
-    } catch (error: any) {
-      this.logger.error(`[ERROR CORREO CONFIRMACIÓN OBLIGATORIA] ${error.message}`);
-    }
+    await this.enviarPorBrevo({
+      correoDestino,
+      nombreDestino: nombresPaciente,
+      asunto: `⚠️ Confirma tu asistencia a tu cita del ${fechaCapitalizada}`,
+      htmlContenido,
+      etiquetaLog: 'CORREO CONFIRMACIÓN OBLIGATORIA ENVIADO',
+    });
   }
 
   // Alias retrocompatible
