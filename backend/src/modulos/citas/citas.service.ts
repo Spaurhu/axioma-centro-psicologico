@@ -24,8 +24,8 @@ export class CitasService {
   ) {}
 
   async crear(dto: CrearCitaDto) {
-    const inicio = new Date(dto.fechaHoraInicio);
-    const fin = new Date(dto.fechaHoraFin);
+    const inicio = this.parsearFechaLima(dto.fechaHoraInicio);
+    const fin = this.parsearFechaLima(dto.fechaHoraFin);
     const ahora = new Date();
 
     if (inicio < ahora) {
@@ -171,8 +171,9 @@ export class CitasService {
     // 5. Inferencia de Machine Learning (No-Show Prediction)
     const hoy = new Date();
     const diffDias = Math.max(0, Math.ceil((inicio.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24)));
-    const diaSemanaIndex = (inicio.getDay() + 6) % 7; // 0: Lunes, 6: Domingo
-    const hora = inicio.getHours();
+    const fechaLimaMl = new Date(inicio.toLocaleString('en-US', { timeZone: 'America/Lima' }));
+    const diaSemanaIndex = (fechaLimaMl.getDay() + 6) % 7; // 0: Lunes, 6: Domingo
+    const hora = fechaLimaMl.getHours();
     const turno = hora < 13 ? 0 : hora < 18 ? 1 : 2;
 
     const inasistenciasPrevias = paciente.citas.filter((c) => c.estado === EstadoCita.NO_ASISTIO).length;
@@ -256,11 +257,9 @@ export class CitasService {
     let whereClause: any = {};
 
     if (fechaStr) {
-      const inicioDia = new Date(fechaStr);
-      inicioDia.setHours(0, 0, 0, 0);
-
-      const finDia = new Date(fechaStr);
-      finDia.setHours(23, 59, 59, 999);
+      const fechaBase = fechaStr.split('T')[0];
+      const inicioDia = new Date(`${fechaBase}T00:00:00.000-05:00`);
+      const finDia = new Date(`${fechaBase}T23:59:59.999-05:00`);
 
       whereClause.fechaHoraInicio = {
         gte: inicioDia,
@@ -438,8 +437,8 @@ export class CitasService {
       throw new NotFoundException('Cita no encontrada');
     }
 
-    const nuevaInicio = new Date(dto.nuevaFechaHoraInicio);
-    const nuevaFin = new Date(dto.nuevaFechaHoraFin);
+    const nuevaInicio = this.parsearFechaLima(dto.nuevaFechaHoraInicio);
+    const nuevaFin = this.parsearFechaLima(dto.nuevaFechaHoraFin);
     const ahora = new Date();
 
     if (nuevaInicio < ahora) {
@@ -893,14 +892,31 @@ export class CitasService {
     return cita.evolucionClinica;
   }
 
+  private parsearFechaLima(fechaStr: string): Date {
+    const limpio = String(fechaStr || '').trim();
+    const tieneZona = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(limpio);
+    return new Date(tieneZona ? limpio : `${limpio}-05:00`);
+  }
+
+  private normalizarHoraConfig(horaStr: string): string {
+    const partes = String(horaStr || '').trim().split(':');
+    const hh = (partes[0] || '00').padStart(2, '0');
+    const mm = (partes[1] || '00').padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+
   private extraerHoraString(fecha: Date): string {
     const formatter = new Intl.DateTimeFormat('es-PE', {
       timeZone: 'America/Lima',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
+      hourCycle: 'h23',
     });
-    return formatter.format(fecha);
+    const partes = formatter.formatToParts(fecha);
+    const hh = (partes.find((p) => p.type === 'hour')?.value || '00').padStart(2, '0');
+    const mm = (partes.find((p) => p.type === 'minute')?.value || '00').padStart(2, '0');
+    return `${hh === '24' ? '00' : hh}:${mm}`;
   }
 
   private async validarHorarioYCruces(params: ValidarHorarioYCrucesParams) {
@@ -955,7 +971,10 @@ export class CitasService {
     if (
       configHorario.horaInicio &&
       configHorario.horaFin &&
-      (horaInicioCita < configHorario.horaInicio || horaFinCita > configHorario.horaFin)
+      (
+        horaInicioCita < this.normalizarHoraConfig(configHorario.horaInicio) ||
+        horaFinCita > this.normalizarHoraConfig(configHorario.horaFin)
+      )
     ) {
       throw new BadRequestException(
         `La cita debe estar dentro del horario de atención: ${configHorario.horaInicio} - ${configHorario.horaFin}`,
@@ -968,8 +987,8 @@ export class CitasService {
       configHorario.horaInicioRefrigerio &&
       configHorario.horaFinRefrigerio
     ) {
-      const refrigInicio = configHorario.horaInicioRefrigerio;
-      const refrigFin = configHorario.horaFinRefrigerio;
+      const refrigInicio = this.normalizarHoraConfig(configHorario.horaInicioRefrigerio);
+      const refrigFin = this.normalizarHoraConfig(configHorario.horaFinRefrigerio);
 
       if (horaInicioCita < refrigFin && horaFinCita > refrigInicio) {
         throw new BadRequestException('El horario seleccionado coincide con el receso de refrigerio (13:00 - 14:00)');
@@ -989,7 +1008,10 @@ export class CitasService {
       throw new BadRequestException('El psicólogo no tiene disponibilidad para ese día');
     }
 
-    if (horaInicioCita < disponibilidad.horaInicio || horaFinCita > disponibilidad.horaFin) {
+    const dispInicio = this.normalizarHoraConfig(disponibilidad.horaInicio);
+    const dispFin = this.normalizarHoraConfig(disponibilidad.horaFin);
+
+    if (horaInicioCita < dispInicio || horaFinCita > dispFin) {
       throw new BadRequestException(
         `El psicólogo solo atiende de ${disponibilidad.horaInicio} a ${disponibilidad.horaFin}`,
       );
