@@ -64,6 +64,7 @@ export default function PortalPaciente() {
   const [cargando, setCargando] = useState(true);
   const [errorAcceso, setErrorAcceso] = useState<string | null>(null);
   const [mostrarModalCita, setMostrarModalCita] = useState(false);
+  const [procesando, setProcesando] = useState(false);
 
   const hoyStr = new Date().toISOString().split('T')[0];
 
@@ -147,7 +148,7 @@ export default function PortalPaciente() {
 
   const handleAgendar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pacienteInfo?.id) return;
+    if (!pacienteInfo?.id || procesando) return;
 
     const bloques = generarHorariosDisponibles(formCita.fecha);
     const bloque = bloques[parseInt(formCita.horarioIndex)] || bloques[0];
@@ -171,6 +172,7 @@ export default function PortalPaciente() {
       return;
     }
 
+    setProcesando(true);
     try {
       await apiFetch('/citas', {
         method: 'POST',
@@ -189,6 +191,8 @@ export default function PortalPaciente() {
       cargarDatosPaciente(usuario);
     } catch (err: any) {
       toast.error(err.message || 'Error al agendar cita');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -572,11 +576,20 @@ export default function PortalPaciente() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalCita(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button
+                    type="button"
+                    disabled={procesando}
+                    onClick={() => setMostrarModalCita(false)}
+                    className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Confirmar reserva
+                  <button
+                    type="submit"
+                    disabled={procesando}
+                    className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {procesando ? 'Procesando...' : 'Confirmar reserva'}
                   </button>
                 </div>
               </form>

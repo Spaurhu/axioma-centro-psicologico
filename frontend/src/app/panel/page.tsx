@@ -93,6 +93,7 @@ export default function PanelStaff() {
   const [paqueteSeleccionadoParaPago, setPaqueteSeleccionadoParaPago] = useState<any>(null);
   const [pacienteSeleccionadoParaPago, setPacienteSeleccionadoParaPago] = useState<any>(null);
   const [guardandoPago, setGuardandoPago] = useState(false);
+  const [procesando, setProcesando] = useState(false);
   const [formPago, setFormPago] = useState({
     monto: 0,
     metodoPago: 'Efectivo en recepción',
@@ -296,6 +297,7 @@ export default function PanelStaff() {
 
   // --- ACCIONES DE CITAS ---
   const handleMarcarAsistencia = async (c: any) => {
+    if (procesando) return;
     // Validar en el cliente que no sea fecha futura
     const ahora = new Date();
     const tiempoHastaInicio = new Date(c.fechaHoraInicio).getTime() - ahora.getTime();
@@ -305,17 +307,21 @@ export default function PanelStaff() {
     }
 
     if (!confirm('¿Desea marcar asistencia para esta sesión? Se descontará automáticamente 1 sesión del paquete del paciente.')) return;
+    setProcesando(true);
     try {
       await apiFetch(`/citas/${c.id}/asistencia`, { method: 'PATCH' });
       toast.success('Asistencia registrada y sesión consumida exitosamente.');
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al marcar asistencia');
+    } finally {
+      setProcesando(false);
     }
   };
 
   const handleCrearCita = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (procesando) return;
     setErrorModalCita(null);
     const bloques = generarHorariosDisponibles(formCita.fecha);
     const bloque = bloques[parseInt(formCita.horarioIndex)] || bloques[0];
@@ -337,6 +343,7 @@ export default function PanelStaff() {
       return;
     }
 
+    setProcesando(true);
     try {
       await apiFetch('/citas', {
         method: 'POST',
@@ -365,6 +372,8 @@ export default function PanelStaff() {
       const msg = err.message || 'Error al agendar cita';
       setErrorModalCita(msg);
       toast.error(msg);
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -396,7 +405,7 @@ export default function PanelStaff() {
 
   const handleReprogramarCita = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!citaSeleccionadaParaReprog) return;
+    if (!citaSeleccionadaParaReprog || procesando) return;
     const bloques = generarHorariosDisponibles(formReprogramar.fecha);
     const bloque = bloques[parseInt(formReprogramar.horarioIndex)] || bloques[0];
     if (!bloque) {
@@ -417,6 +426,7 @@ export default function PanelStaff() {
       return;
     }
 
+    setProcesando(true);
     try {
       await apiFetch(`/citas/${citaSeleccionadaParaReprog.id}/reprogramar`, {
         method: 'PUT',
@@ -431,6 +441,8 @@ export default function PanelStaff() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al reprogramar la cita');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -517,18 +529,22 @@ export default function PanelStaff() {
 
   // --- ACCIÓN EXCLUSIVA ADMINISTRADOR: REVERTIR CITA ---
   const handleRevertirCita = async (cita: any) => {
+    if (procesando) return;
     if (usuario?.rol !== 'ADMINISTRADOR') {
       toast.error('Acción restringida exclusivamente para Administradores.');
       return;
     }
     const nombrePaciente = cita.paciente ? `${cita.paciente.nombres} ${cita.paciente.apellidos}` : 'Paciente';
     if (!confirm(`¿Deseas revertir administrativamente la cita de ${nombrePaciente}? Se reintegrará 1 sesión consumida al paquete y la cita volverá a estado PROGRAMADA.`)) return;
+    setProcesando(true);
     try {
       await apiFetch(`/citas/${cita.id}/revertir`, { method: 'POST' });
       toast.success('Cita revertida y sesión reintegrada exitosamente.');
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al revertir la cita');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -626,6 +642,7 @@ export default function PanelStaff() {
   // --- REGISTRO DE PSICÓLOGO (HU-02) ---
   const handleCrearPsicologo = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (procesando) return;
     if (!/^[0-9]{8}$/.test(formPsicologo.dni)) {
       toast.error('El DNI debe tener 8 dígitos numéricos');
       return;
@@ -634,6 +651,7 @@ export default function PanelStaff() {
       toast.error('El teléfono debe tener 9 dígitos');
       return;
     }
+    setProcesando(true);
     try {
       await apiFetch('/psicologos', {
         method: 'POST',
@@ -664,12 +682,15 @@ export default function PanelStaff() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar psicólogo');
+    } finally {
+      setProcesando(false);
     }
   };
 
   // --- REGISTRAR NUEVO PACIENTE ---
   const handleCrearPaciente = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (procesando) return;
     if (!/^[0-9]{8}$/.test(formNuevoPaciente.dni)) {
       toast.error('El DNI debe tener 8 dígitos numéricos');
       return;
@@ -678,6 +699,7 @@ export default function PanelStaff() {
       toast.error('El teléfono debe tener 9 dígitos');
       return;
     }
+    setProcesando(true);
     try {
       await apiFetch('/pacientes', {
         method: 'POST',
@@ -696,6 +718,8 @@ export default function PanelStaff() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar paciente');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -715,7 +739,8 @@ export default function PanelStaff() {
 
   const handleActualizarPaciente = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pacienteSeleccionadoParaEditar) return;
+    if (!pacienteSeleccionadoParaEditar || procesando) return;
+    setProcesando(true);
     try {
       await apiFetch(`/pacientes/${pacienteSeleccionadoParaEditar.id}`, {
         method: 'PUT',
@@ -726,6 +751,8 @@ export default function PanelStaff() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al actualizar paciente');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -743,7 +770,8 @@ export default function PanelStaff() {
 
   const handleAsignarPaquete = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pacienteSeleccionadoParaPaquete) return;
+    if (!pacienteSeleccionadoParaPaquete || procesando) return;
+    setProcesando(true);
     try {
       await apiFetch('/paquetes/asignar', {
         method: 'POST',
@@ -759,6 +787,8 @@ export default function PanelStaff() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al asignar paquete');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -800,6 +830,8 @@ export default function PanelStaff() {
   // --- CREAR NUEVO PAQUETE (HU-08) ---
   const handleCrearPaquete = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (procesando) return;
+    setProcesando(true);
     try {
       await apiFetch('/paquetes', {
         method: 'POST',
@@ -822,6 +854,8 @@ export default function PanelStaff() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al crear paquete');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -1188,15 +1222,17 @@ export default function PanelStaff() {
                                 {c.estado === 'PROGRAMADA' && (
                                   <>
                                     <button
+                                      disabled={procesando}
                                       onClick={() => handleMarcarAsistencia(c)}
-                                      className={`${btnPrimary} px-3 py-1.5 text-xs`}
+                                      className={`${btnPrimary} px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
                                     >
                                       Asistencia
                                     </button>
                                     <button
+                                      disabled={procesando}
                                       onClick={() => abrirModalReprogramar(c)}
                                       title="Reprogramar fecha/hora"
-                                      className={`${btnSecondary} px-2.5 py-1.5 text-xs`}
+                                      className={`${btnSecondary} px-2.5 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
                                     >
                                       Reprogramar
                                     </button>
@@ -1204,9 +1240,10 @@ export default function PanelStaff() {
                                 )}
                                 {usuario?.rol === 'ADMINISTRADOR' && (c.estado === 'ATENDIDA' || c.estado === 'NO_ASISTIO' || c.estado === 'CANCELADA') && (
                                   <button
+                                    disabled={procesando}
                                     onClick={() => handleRevertirCita(c)}
                                     title="Revertir cita y restituir 1 sesión al paquete del paciente"
-                                    className="rounded-button border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
+                                    className="rounded-button border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     Revertir
                                   </button>
@@ -1658,23 +1695,25 @@ export default function PanelStaff() {
                   <>
                     <button
                       type="button"
+                      disabled={procesando}
                       onClick={() => {
                         const c = citaSeleccionadaParaDetalle;
                         setMostrarModalDetalle(false);
                         handleMarcarAsistencia(c);
                       }}
-                      className={`${btnPrimary} px-3 py-1.5 text-xs`}
+                      className={`${btnPrimary} px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       Asistencia
                     </button>
                     <button
                       type="button"
+                      disabled={procesando}
                       onClick={() => {
                         const c = citaSeleccionadaParaDetalle;
                         setMostrarModalDetalle(false);
                         abrirModalReprogramar(c);
                       }}
-                      className={`${btnSecondary} px-3 py-1.5 text-xs`}
+                      className={`${btnSecondary} px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       Reprogramar
                     </button>
@@ -1684,12 +1723,13 @@ export default function PanelStaff() {
                 {(citaSeleccionadaParaDetalle.estado === 'ATENDIDA' || citaSeleccionadaParaDetalle.estado === 'NO_ASISTIO' || citaSeleccionadaParaDetalle.estado === 'CANCELADA') && (
                   <button
                     type="button"
+                    disabled={procesando}
                     onClick={() => {
                       const c = citaSeleccionadaParaDetalle;
                       setMostrarModalDetalle(false);
                       handleRevertirCita(c);
                     }}
-                    className="rounded-button border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition"
+                    className="rounded-button border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Revertir Cita
                   </button>
@@ -1879,11 +1919,11 @@ export default function PanelStaff() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalCita(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalCita(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Confirmar reserva
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Confirmar reserva'}
                   </button>
                 </div>
               </form>
@@ -1958,11 +1998,11 @@ export default function PanelStaff() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalReprogramar(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalReprogramar(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Guardar reprogramación
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Guardar reprogramación'}
                   </button>
                 </div>
               </form>
@@ -2379,11 +2419,11 @@ export default function PanelStaff() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalPsicologo(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalPsicologo(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Guardar psicólogo
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Guardar psicólogo'}
                   </button>
                 </div>
               </form>
@@ -2490,11 +2530,11 @@ export default function PanelStaff() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalNuevoPaciente(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalNuevoPaciente(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Guardar paciente
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Guardar paciente'}
                   </button>
                 </div>
               </form>
@@ -2586,11 +2626,11 @@ export default function PanelStaff() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalEditarPaciente(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalEditarPaciente(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Actualizar paciente
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Actualizar paciente'}
                   </button>
                 </div>
               </form>
@@ -2664,11 +2704,11 @@ export default function PanelStaff() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalAsignarPaquete(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalAsignarPaquete(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Asignar paquete
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Asignar paquete'}
                   </button>
                 </div>
               </form>
@@ -2752,11 +2792,11 @@ export default function PanelStaff() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalCrearPaquete(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalCrearPaquete(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Guardar paquete
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Guardar paquete'}
                   </button>
                 </div>
               </form>

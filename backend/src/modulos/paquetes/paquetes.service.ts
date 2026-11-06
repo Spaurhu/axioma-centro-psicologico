@@ -89,6 +89,22 @@ export class PaquetesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // 0. Actualización atómica condicional para evitar cobros duplicados por concurrencia
+      const activacion = await tx.paquetePaciente.updateMany({
+        where: {
+          id: paquetePacienteId,
+          estado: EstadoPaquete.PENDIENTE_PAGO,
+        },
+        data: {
+          estado: EstadoPaquete.ACTIVO,
+          fechaCompra: new Date(),
+        },
+      });
+
+      if (activacion.count === 0) {
+        throw new BadRequestException('El paquete ya fue pagado o no está pendiente de pago');
+      }
+
       // 1. Crear el registro en Pago
       const pago = await tx.pago.create({
         data: {
@@ -100,13 +116,9 @@ export class PaquetesService {
         },
       });
 
-      // 2. Actualizar PaquetePaciente a ACTIVO
-      const paqueteActualizado = await tx.paquetePaciente.update({
+      // 2. Obtener PaquetePaciente actualizado con relaciones
+      const paqueteActualizado = await tx.paquetePaciente.findUnique({
         where: { id: paquetePacienteId },
-        data: {
-          estado: EstadoPaquete.ACTIVO,
-          fechaCompra: new Date(),
-        },
         include: { paquete: true, paciente: true, pagos: true },
       });
 

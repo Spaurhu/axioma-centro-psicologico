@@ -90,6 +90,7 @@ export default function PanelRecepcion() {
   const [paqueteSeleccionadoParaPago, setPaqueteSeleccionadoParaPago] = useState<any>(null);
   const [pacienteSeleccionadoParaPago, setPacienteSeleccionadoParaPago] = useState<any>(null);
   const [guardandoPago, setGuardandoPago] = useState(false);
+  const [procesando, setProcesando] = useState(false);
   const [formPago, setFormPago] = useState({
     monto: 0,
     metodoPago: 'Efectivo en recepción',
@@ -231,30 +232,40 @@ export default function PanelRecepcion() {
 
   // --- ACCIONES DE CITAS (RECEPCIÓN) ---
   const handleMarcarAsistencia = async (c: any) => {
+    if (procesando) return;
     if (!confirm('¿Desea registrar asistencia para esta sesión? Se descontará automáticamente 1 sesión del paquete.')) return;
+    setProcesando(true);
     try {
       await apiFetch(`/citas/${c.id}/asistencia`, { method: 'PATCH' });
       toast.success('Asistencia registrada y sesión consumida.');
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al marcar asistencia');
+    } finally {
+      setProcesando(false);
     }
   };
 
   const handleMarcarNoAsistio = async (c: any) => {
+    if (procesando) return;
     if (!confirm('¿Confirmas que el paciente no asistió a su cita programada?')) return;
+    setProcesando(true);
     try {
       await apiFetch(`/citas/${c.id}/no-asistio`, { method: 'PATCH' });
       toast.success('Inasistencia (No-Show) registrada.');
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar inasistencia');
+    } finally {
+      setProcesando(false);
     }
   };
 
   const handleCancelarCita = async (c: any) => {
+    if (procesando) return;
     const motivo = prompt('Ingrese el motivo de la cancelación de la cita:');
     if (motivo === null) return;
+    setProcesando(true);
     try {
       await apiFetch(`/citas/${c.id}/cancelar`, {
         method: 'PATCH',
@@ -264,6 +275,8 @@ export default function PanelRecepcion() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al cancelar cita');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -285,6 +298,7 @@ export default function PanelRecepcion() {
 
   const handleCrearCita = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (procesando) return;
     setErrorModalCita(null);
     const bloques = generarHorariosDisponibles(formCita.fecha);
     const bloque = bloques[parseInt(formCita.horarioIndex)] || bloques[0];
@@ -306,6 +320,7 @@ export default function PanelRecepcion() {
       return;
     }
 
+    setProcesando(true);
     try {
       await apiFetch('/citas', {
         method: 'POST',
@@ -334,6 +349,8 @@ export default function PanelRecepcion() {
       const msg = err.message || 'Error al agendar cita';
       setErrorModalCita(msg);
       toast.error(msg);
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -365,7 +382,7 @@ export default function PanelRecepcion() {
 
   const handleReprogramarCita = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!citaSeleccionadaParaReprog) return;
+    if (!citaSeleccionadaParaReprog || procesando) return;
     const bloques = generarHorariosDisponibles(formReprogramar.fecha);
     const bloque = bloques[parseInt(formReprogramar.horarioIndex)] || bloques[0];
     if (!bloque) {
@@ -386,6 +403,7 @@ export default function PanelRecepcion() {
       return;
     }
 
+    setProcesando(true);
     try {
       await apiFetch(`/citas/${citaSeleccionadaParaReprog.id}/reprogramar`, {
         method: 'PUT',
@@ -400,12 +418,15 @@ export default function PanelRecepcion() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al reprogramar la cita');
+    } finally {
+      setProcesando(false);
     }
   };
 
   // --- REGISTRAR NUEVO PACIENTE ---
   const handleCrearPaciente = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (procesando) return;
     if (!/^[0-9]{8}$/.test(formNuevoPaciente.dni)) {
       toast.error('El DNI debe tener 8 dígitos numéricos');
       return;
@@ -414,6 +435,7 @@ export default function PanelRecepcion() {
       toast.error('El teléfono debe tener 9 dígitos');
       return;
     }
+    setProcesando(true);
     try {
       await apiFetch('/pacientes', {
         method: 'POST',
@@ -432,6 +454,8 @@ export default function PanelRecepcion() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar paciente');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -451,7 +475,8 @@ export default function PanelRecepcion() {
 
   const handleActualizarPaciente = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pacienteSeleccionadoParaEditar) return;
+    if (!pacienteSeleccionadoParaEditar || procesando) return;
+    setProcesando(true);
     try {
       await apiFetch(`/pacientes/${pacienteSeleccionadoParaEditar.id}`, {
         method: 'PUT',
@@ -462,6 +487,8 @@ export default function PanelRecepcion() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al actualizar paciente');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -479,7 +506,8 @@ export default function PanelRecepcion() {
 
   const handleAsignarPaquete = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pacienteSeleccionadoParaPaquete) return;
+    if (!pacienteSeleccionadoParaPaquete || procesando) return;
+    setProcesando(true);
     try {
       await apiFetch('/paquetes/asignar', {
         method: 'POST',
@@ -495,6 +523,8 @@ export default function PanelRecepcion() {
       cargarDatos();
     } catch (err: any) {
       toast.error(err.message || 'Error al asignar paquete');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -787,30 +817,34 @@ export default function PanelRecepcion() {
                                 {c.estado === 'PROGRAMADA' && (
                                   <>
                                     <button
+                                      disabled={procesando}
                                       onClick={() => handleMarcarAsistencia(c)}
                                       title="Marcar asistencia y consumir sesión"
-                                      className={`${btnPrimary} px-2.5 py-1.5 text-xs`}
+                                      className={`${btnPrimary} px-2.5 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
                                     >
                                       Asistencia
                                     </button>
                                     <button
+                                      disabled={procesando}
                                       onClick={() => abrirModalReprogramar(c)}
                                       title="Reprogramar fecha u hora"
-                                      className={`${btnSecondary} px-2.5 py-1.5 text-xs`}
+                                      className={`${btnSecondary} px-2.5 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
                                     >
                                       Reprogramar
                                     </button>
                                     <button
+                                      disabled={procesando}
                                       onClick={() => handleMarcarNoAsistio(c)}
                                       title="Registrar inasistencia (No-Show)"
-                                      className="rounded-button border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+                                      className="rounded-button border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       No asistió
                                     </button>
                                     <button
+                                      disabled={procesando}
                                       onClick={() => handleCancelarCita(c)}
                                       title="Cancelar cita"
-                                      className="rounded-button border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
+                                      className="rounded-button border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       Cancelar
                                     </button>
@@ -1217,45 +1251,49 @@ export default function PanelRecepcion() {
                   <>
                     <button
                       type="button"
+                      disabled={procesando}
                       onClick={() => {
                         const c = citaSeleccionadaParaDetalle;
                         setMostrarModalDetalle(false);
                         handleMarcarAsistencia(c);
                       }}
-                      className={`${btnPrimary} px-3 py-1.5 text-xs`}
+                      className={`${btnPrimary} px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       Asistencia
                     </button>
                     <button
                       type="button"
+                      disabled={procesando}
                       onClick={() => {
                         const c = citaSeleccionadaParaDetalle;
                         setMostrarModalDetalle(false);
                         abrirModalReprogramar(c);
                       }}
-                      className={`${btnSecondary} px-3 py-1.5 text-xs`}
+                      className={`${btnSecondary} px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       Reprogramar
                     </button>
                     <button
                       type="button"
+                      disabled={procesando}
                       onClick={() => {
                         const c = citaSeleccionadaParaDetalle;
                         setMostrarModalDetalle(false);
                         handleMarcarNoAsistio(c);
                       }}
-                      className="rounded-button border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+                      className="rounded-button border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       No asistió
                     </button>
                     <button
                       type="button"
+                      disabled={procesando}
                       onClick={() => {
                         const c = citaSeleccionadaParaDetalle;
                         setMostrarModalDetalle(false);
                         handleCancelarCita(c);
                       }}
-                      className="rounded-button border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
+                      className="rounded-button border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancelar
                     </button>
@@ -1458,11 +1496,11 @@ export default function PanelRecepcion() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalCita(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalCita(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Confirmar reserva
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Confirmar reserva'}
                   </button>
                 </div>
               </form>
@@ -1538,11 +1576,11 @@ export default function PanelRecepcion() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalReprogramar(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalReprogramar(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Confirmar reprogramación
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Confirmar reprogramación'}
                   </button>
                 </div>
               </form>
@@ -1649,11 +1687,11 @@ export default function PanelRecepcion() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalNuevoPaciente(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalNuevoPaciente(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Guardar paciente
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Guardar paciente'}
                   </button>
                 </div>
               </form>
@@ -1740,11 +1778,11 @@ export default function PanelRecepcion() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalEditarPaciente(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalEditarPaciente(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Actualizar paciente
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Actualizar paciente'}
                   </button>
                 </div>
               </form>
@@ -1818,11 +1856,11 @@ export default function PanelRecepcion() {
                 </div>
 
                 <div className="flex flex-col-reverse gap-3 border-t border-axioma-100 pt-5 sm:flex-row sm:justify-end">
-                  <button type="button" onClick={() => setMostrarModalAsignarPaquete(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button type="button" disabled={procesando} onClick={() => setMostrarModalAsignarPaquete(false)} className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Asignar paquete
+                  <button type="submit" disabled={procesando} className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                    {procesando ? 'Procesando...' : 'Asignar paquete'}
                   </button>
                 </div>
               </form>
@@ -1942,6 +1980,7 @@ export default function PanelRecepcion() {
               <div className="mt-5 flex justify-end gap-2 border-t border-axioma-100 pt-4">
                 <button
                   type="button"
+                  disabled={enviandoRecordatorio}
                   onClick={() => setCitaParaRecordatorio(null)}
                   className={`${btnSecondary} ${tamMd}`}
                 >

@@ -54,6 +54,7 @@ export default function PortalPsicologo() {
   const [citaSeleccionadaReprog, setCitaSeleccionadaReprog] = useState<any>(null);
   const [citaParaRecordatorio, setCitaParaRecordatorio] = useState<any>(null);
   const [enviandoRecordatorio, setEnviandoRecordatorio] = useState(false);
+  const [procesando, setProcesando] = useState(false);
   const [formReprog, setFormReprog] = useState({
     fecha: new Date().toISOString().split('T')[0],
     horaInicio: '09:00',
@@ -109,6 +110,8 @@ export default function PortalPsicologo() {
 
   // Acciones sobre citas
   const handleMarcarAsistencia = async (cita: any) => {
+    if (procesando) return;
+    setProcesando(true);
     try {
       await apiFetch(`/citas/${cita.id}/asistencia`, { method: 'PATCH' });
       toast.success('Asistencia registrada. Sesión contabilizada en el historial clínico.');
@@ -116,23 +119,31 @@ export default function PortalPsicologo() {
       abrirModalNota(cita);
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar asistencia');
+    } finally {
+      setProcesando(false);
     }
   };
 
   const handleMarcarNoAsistio = async (cita: any) => {
+    if (procesando) return;
     if (!confirm('¿Confirmas que el paciente no acudió a la sesión?')) return;
+    setProcesando(true);
     try {
       await apiFetch(`/citas/${cita.id}/no-asistio`, { method: 'PATCH' });
       toast.success('Inasistencia (No-Show) registrada.');
       cargarCitas();
     } catch (err: any) {
       toast.error(err.message || 'Error al registrar inasistencia');
+    } finally {
+      setProcesando(false);
     }
   };
 
   const handleCancelar = async (cita: any) => {
+    if (procesando) return;
     const motivo = prompt('Motivo de cancelación:');
     if (motivo === null) return;
+    setProcesando(true);
     try {
       await apiFetch(`/citas/${cita.id}/cancelar`, {
         method: 'PATCH',
@@ -142,6 +153,8 @@ export default function PortalPsicologo() {
       cargarCitas();
     } catch (err: any) {
       toast.error(err.message || 'Error al cancelar cita');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -381,7 +394,8 @@ export default function PortalPsicologo() {
 
   const handleReprogramar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!citaSeleccionadaReprog) return;
+    if (!citaSeleccionadaReprog || procesando) return;
+    setProcesando(true);
     try {
       const nuevaInicio = `${formReprog.fecha}T${formReprog.horaInicio}:00`;
       const nuevaFin = `${formReprog.fecha}T${formReprog.horaFin}:00`;
@@ -399,6 +413,8 @@ export default function PortalPsicologo() {
       cargarCitas();
     } catch (err: any) {
       toast.error(err.message || 'Error al reprogramar cita');
+    } finally {
+      setProcesando(false);
     }
   };
 
@@ -712,26 +728,30 @@ export default function PortalPsicologo() {
                                 {c.estado === 'PROGRAMADA' && (
                                   <>
                                     <button
+                                      disabled={procesando}
                                       onClick={() => handleMarcarAsistencia(c)}
-                                      className={`${btnPrimary} px-2.5 py-1 text-xs`}
+                                      className={`${btnPrimary} px-2.5 py-1 text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
                                     >
                                       Asistencia
                                     </button>
                                     <button
+                                      disabled={procesando}
                                       onClick={() => handleMarcarNoAsistio(c)}
-                                      className="rounded-button border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                                      className="rounded-button border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       No asistió
                                     </button>
                                     <button
+                                      disabled={procesando}
                                       onClick={() => abrirModalReprogramar(c)}
-                                      className={`${btnSecondary} px-2 py-1 text-xs`}
+                                      className={`${btnSecondary} px-2 py-1 text-xs disabled:opacity-50 disabled:cursor-not-allowed`}
                                     >
                                       Reprogramar
                                     </button>
                                     <button
+                                      disabled={procesando}
                                       onClick={() => handleCancelar(c)}
-                                      className="rounded p-1 text-axiomaText-soft hover:text-rose-700"
+                                      className="rounded p-1 text-axiomaText-soft hover:text-rose-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                       title="Cancelar cita"
                                     >
                                       <XCircle className="h-4 w-4" />
@@ -1393,6 +1413,7 @@ export default function PortalPsicologo() {
                   <div className="flex items-center justify-end gap-2">
                     <button
                       type="button"
+                      disabled={guardandoNota}
                       onClick={() => setMostrarModalNota(false)}
                       className={`${btnSecondary} ${tamMd}`}
                     >
@@ -1473,11 +1494,20 @@ export default function PortalPsicologo() {
                   />
                 </div>
                 <div className="flex justify-end gap-2 border-t border-axioma-100 pt-3">
-                  <button type="button" onClick={() => setMostrarModalReprog(false)} className={`${btnSecondary} ${tamMd}`}>
+                  <button
+                    type="button"
+                    disabled={procesando}
+                    onClick={() => setMostrarModalReprog(false)}
+                    className={`${btnSecondary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
                     Cancelar
                   </button>
-                  <button type="submit" className={`${btnPrimary} ${tamMd}`}>
-                    Guardar cambio
+                  <button
+                    type="submit"
+                    disabled={procesando}
+                    className={`${btnPrimary} ${tamMd} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {procesando ? 'Procesando...' : 'Guardar cambio'}
                   </button>
                 </div>
               </form>
@@ -1503,6 +1533,7 @@ export default function PortalPsicologo() {
               <div className="mt-5 flex justify-end gap-2 border-t border-axioma-100 pt-4">
                 <button
                   type="button"
+                  disabled={enviandoRecordatorio}
                   onClick={() => setCitaParaRecordatorio(null)}
                   className={`${btnSecondary} ${tamMd}`}
                 >
