@@ -73,6 +73,7 @@ export default function PortalPaciente() {
     fecha: hoyStr,
     horarioIndex: '0',
     motivoConsulta: MOTIVOS_CONSULTA[0].valor,
+    modalidad: 'PRESENCIAL' as 'PRESENCIAL' | 'VIRTUAL',
   });
 
   useEffect(() => {
@@ -183,11 +184,18 @@ export default function PortalPaciente() {
           fechaHoraFin,
           motivoConsulta: formCita.motivoConsulta || 'Consulta terapéutica',
           tipoCita: tienePaqueteActivo ? 'TERAPIA' : 'EVALUACION',
+          modalidad: formCita.modalidad,
         }),
       });
       toast.success('¡Cita agendada con éxito en el sistema!');
       setMostrarModalCita(false);
-      setFormCita({ psicologoId: '', fecha: hoyStr, horarioIndex: '0', motivoConsulta: MOTIVOS_CONSULTA[0].valor });
+      setFormCita({
+        psicologoId: '',
+        fecha: hoyStr,
+        horarioIndex: '0',
+        motivoConsulta: MOTIVOS_CONSULTA[0].valor,
+        modalidad: 'PRESENCIAL',
+      });
       cargarDatosPaciente(usuario);
     } catch (err: any) {
       toast.error(err.message || 'Error al agendar cita');
@@ -270,6 +278,7 @@ export default function PortalPaciente() {
                   setFormCita((prev) => ({
                     ...prev,
                     psicologoId: paqueteActivo?.psicologoId || prev.psicologoId,
+                    modalidad: 'PRESENCIAL',
                   }));
                   setMostrarModalCita(true);
                 }}
@@ -572,6 +581,46 @@ export default function PortalPaciente() {
                         );
                       })}
                     </select>
+                  </div>
+                </div>
+
+                <div>
+                  <span className={label}>3. Modalidad de atención</span>
+                  <div className="mt-1.5 grid grid-cols-2 gap-3">
+                    <label
+                      className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all ${
+                        formCita.modalidad === 'PRESENCIAL'
+                          ? 'border-axioma-600 bg-axioma-50 text-axioma-800 ring-1 ring-axioma-600'
+                          : 'border-axioma-200 bg-white text-axioma-600 hover:bg-axioma-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="modalidadCitaPaciente"
+                        value="PRESENCIAL"
+                        checked={formCita.modalidad === 'PRESENCIAL'}
+                        onChange={() => setFormCita({ ...formCita, modalidad: 'PRESENCIAL' })}
+                        className="sr-only"
+                      />
+                      🏢 Presencial
+                    </label>
+                    <label
+                      className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all ${
+                        formCita.modalidad === 'VIRTUAL'
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-600'
+                          : 'border-axioma-200 bg-white text-axioma-600 hover:bg-axioma-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="modalidadCitaPaciente"
+                        value="VIRTUAL"
+                        checked={formCita.modalidad === 'VIRTUAL'}
+                        onChange={() => setFormCita({ ...formCita, modalidad: 'VIRTUAL' })}
+                        className="sr-only"
+                      />
+                      📹 Virtual (Google Meet)
+                    </label>
                   </div>
                 </div>
 
