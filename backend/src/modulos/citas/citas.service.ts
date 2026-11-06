@@ -49,7 +49,7 @@ export class CitasService {
       where: { id: dto.pacienteId },
       include: {
         citas: {
-          select: { estado: true },
+          select: { estado: true, tipoCita: true },
         },
       },
     });
@@ -164,6 +164,17 @@ export class CitasService {
             });
           }
           throw new BadRequestException('El paquete del paciente ha expirado. Por favor, adquiera uno nuevo.');
+        }
+
+        const yaTieneEvaluacion = paciente.citas.some(
+          (c) =>
+            c.tipoCita === TipoCita.EVALUACION &&
+            (c.estado === EstadoCita.PROGRAMADA || c.estado === EstadoCita.ATENDIDA),
+        );
+        if (yaTieneEvaluacion) {
+          throw new BadRequestException(
+            'Ya tienes una evaluación registrada. Para continuar, adquiere un paquete en recepción.',
+          );
         }
       }
     }

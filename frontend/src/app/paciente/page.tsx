@@ -215,6 +215,12 @@ export default function PortalPaciente() {
   );
   const tienePaqueteActivo = Boolean(paqueteActivo);
   const psicologoVinculadoId = paqueteActivo?.psicologoId || '';
+  const tieneEvaluacionPendiente = citas.some(
+    (c) =>
+      c.tipoCita === 'EVALUACION' &&
+      (c.estado === 'PROGRAMADA' || c.estado === 'ATENDIDA'),
+  );
+  const bloquearReservaPorEvaluacion = !tienePaqueteActivo && tieneEvaluacionPendiente;
 
   return (
     <div className="min-h-screen bg-axioma-50 font-sans text-axiomaText-ink antialiased selection:bg-axioma-200">
@@ -275,6 +281,10 @@ export default function PortalPaciente() {
                     toast.error('Solo pacientes pueden agendar consultas desde este portal.');
                     return;
                   }
+                  if (bloquearReservaPorEvaluacion) {
+                    toast.warning('Ya tienes tu sesión de evaluación. Para continuar tu tratamiento, adquiere un paquete en recepción.');
+                    return;
+                  }
                   setFormCita((prev) => ({
                     ...prev,
                     psicologoId: paqueteActivo?.psicologoId || prev.psicologoId,
@@ -282,7 +292,7 @@ export default function PortalPaciente() {
                   }));
                   setMostrarModalCita(true);
                 }}
-                disabled={usuario?.rol !== 'PACIENTE'}
+                disabled={usuario?.rol !== 'PACIENTE' || bloquearReservaPorEvaluacion}
                 title="Reservar nueva cita"
                 className={`${btnOnDark} ${tamMd} self-start sm:self-auto disabled:opacity-50 disabled:cursor-not-allowed`}
               >
@@ -291,7 +301,9 @@ export default function PortalPaciente() {
               </button>
               {!tienePaqueteActivo && (
                 <span className="text-xs text-amber-200 font-medium">
-                  {paquetes.some((p) => p.estado === 'VENCIDO' || (p.fechaExpiracion && new Date(p.fechaExpiracion) < new Date()))
+                  {tieneEvaluacionPendiente
+                    ? 'Ya tienes tu sesión de evaluación. Para continuar tu tratamiento, adquiere un paquete en recepción.'
+                    : paquetes.some((p) => p.estado === 'VENCIDO' || (p.fechaExpiracion && new Date(p.fechaExpiracion) < new Date()))
                     ? 'Tu paquete ha expirado. Comunícate con recepción para renovar.'
                     : 'Disponible para agendar tu sesión de EVALUACIÓN inicial'}
                 </span>
