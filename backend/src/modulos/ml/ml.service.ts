@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { NivelRiesgo } from '@prisma/client';
+import { EstadoCita, NivelRiesgo, Rol } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -22,7 +23,7 @@ export interface ResultadoPrediccion {
 export class MlService {
   private coeficientes: any;
 
-  constructor() {
+  constructor(private readonly prisma: PrismaService) {
     this.cargarCoeficientes();
   }
 
@@ -92,6 +93,47 @@ export class MlService {
       probabilidad: probabilidadRedondeada,
       nivelRiesgo,
       factoresClave,
+    };
+  }
+
+  async obtenerResumenPredicciones(user?: any, psicologoIdQuery?: string) {
+    const where: any = {
+      estado: { not: EstadoCita.CANCELADA },
+    };
+
+    if (user?.rol === Rol.PSICOLOGO) {
+      const psi = await this.prisma.psicologo.findUnique({
+        where: { usuarioId: user.id },
+      });
+      if (psi) {
+        where.psicologoId = psi.id;
+      }
+    } else if (psicologoIdQuery) {
+      where.psicologoId = psicologoIdQuery;
+    }
+
+    const citas = await this.prisma.cita.findMany({
+      where,
+      select: {
+        nivelRiesgoInasistencia: true,
+      },
+    });
+
+    let bajo = 0;
+    let medio = 0;
+    let alto = 0;
+
+    for (const c of citas) {
+      if (c.nivelRiesgoInasistencia === NivelRiesgo.ALTO) alto++;
+      else if (c.nivelRiesgoInasistencia === NivelRiesgo.MEDIO) medio++;
+      else bajo++;
+    }
+
+    return {
+      precision: 0.846,
+      rocAuc: 0.87,
+      distribucionRiesgo: { bajo, medio, alto },
+      totalCitas: citas.length,
     };
   }
 }

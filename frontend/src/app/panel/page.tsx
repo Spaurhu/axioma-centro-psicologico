@@ -7,6 +7,7 @@ import {
   Users, UserCheck, Video, List, CalendarDays, ChevronLeft, ChevronRight, Calendar, PackageCheck, Plus, LogOut,
   BrainCircuit, RefreshCw, X, Search, CalendarClock, Clock, Printer, CreditCard, Banknote
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { apiFetch } from '@/lib/api';
 import { LogoAxioma } from '@/components/logo-axioma';
 import {
@@ -67,6 +68,7 @@ export default function PanelStaff() {
   const [catalogoPaquetes, setCatalogoPaquetes] = useState<any[]>([]);
   const [ingresosMes, setIngresosMes] = useState<number>(0);
   const [conteoPagosMes, setConteoPagosMes] = useState<number>(0);
+  const [resumenMl, setResumenMl] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
 
   // Filtros
@@ -244,18 +246,20 @@ export default function PanelStaff() {
     setCargando(true);
     try {
       const urlCitas = fechaFiltro ? `/citas?fecha=${fechaFiltro}` : '/citas';
-      const [dataCitas, dataTodasCitas, dataPsicos, dataPacientes, dataPaquetes] = await Promise.all([
+      const [dataCitas, dataTodasCitas, dataPsicos, dataPacientes, dataPaquetes, dataMl] = await Promise.all([
         apiFetch(urlCitas),
         apiFetch('/citas'),
         apiFetch('/psicologos'),
         apiFetch('/pacientes'),
         apiFetch('/paquetes/catalogo'),
+        apiFetch('/ml/predicciones-resumen').catch(() => null),
       ]);
       setCitas(dataCitas || []);
       setTodasLasCitas(dataTodasCitas || []);
       setPsicologos(dataPsicos || []);
       setPacientes(dataPacientes || []);
       setCatalogoPaquetes(dataPaquetes || []);
+      if (dataMl) setResumenMl(dataMl);
 
       const usuarioLocal = usuario || (typeof window !== 'undefined' && localStorage.getItem('axioma_usuario') ? JSON.parse(localStorage.getItem('axioma_usuario')!) : null);
       if (usuarioLocal?.rol === 'ADMINISTRADOR') {
@@ -899,9 +903,23 @@ export default function PanelStaff() {
           },
         ]
       : []),
-    { etiqueta: 'Modelo Machine Learning', valor: '84.6%', nota: 'ROC-AUC 0.87', fondo: 'bg-heather border-white/60', notaClase: 'text-axioma-700' },
     { etiqueta: 'Pacientes en el centro', valor: pacientes.length, nota: 'Tratamiento activo', fondo: 'bg-white border-axioma-200/70', notaClase: 'text-axiomaText-soft' },
     { etiqueta: 'Psicólogos activos', valor: psicologos.length, nota: 'Colegiados C.Ps.P.', fondo: 'bg-axioma-100 border-axioma-200', notaClase: 'text-axioma-700' },
+  ];
+
+  const citasActivasMl = (todasLasCitas.length > 0 ? todasLasCitas : citas).filter((c) => c.estado !== 'CANCELADA');
+  const conteoBajo = resumenMl?.distribucionRiesgo?.bajo ?? citasActivasMl.filter((c) => !c.nivelRiesgoInasistencia || c.nivelRiesgoInasistencia === 'BAJO').length;
+  const conteoMedio = resumenMl?.distribucionRiesgo?.medio ?? citasActivasMl.filter((c) => c.nivelRiesgoInasistencia === 'MEDIO').length;
+  const conteoAlto = resumenMl?.distribucionRiesgo?.alto ?? citasActivasMl.filter((c) => c.nivelRiesgoInasistencia === 'ALTO').length;
+  const totalCitasMl = Math.max(1, (resumenMl?.totalCitas ?? citasActivasMl.length) || (conteoBajo + conteoMedio + conteoAlto));
+  const pctBajo = Math.round((conteoBajo / totalCitasMl) * 100);
+  const pctMedio = Math.round((conteoMedio / totalCitasMl) * 100);
+  const pctAlto = Math.round((conteoAlto / totalCitasMl) * 100);
+  const precisionPct = Math.round(((resumenMl?.precision ?? 0.846) as number) * 1000) / 10;
+  const rocAucValor = resumenMl?.rocAuc ?? 0.87;
+  const datosDonutPrecision = [
+    { name: 'Precisión del modelo', value: precisionPct, color: '#0d9488' },
+    { name: 'Margen residual', value: Math.round((100 - precisionPct) * 10) / 10, color: '#e2e8f0' },
   ];
 
   const tituloVista = tabActiva === 'agenda' ? 'Agenda Central & Predicción ML'
@@ -1028,7 +1046,7 @@ export default function PanelStaff() {
           </div>
 
           {/* Métricas */}
-          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {metricas.map((m: any) => (
               <div
                 key={m.etiqueta}
@@ -1070,27 +1088,97 @@ export default function PanelStaff() {
             ))}
           </div>
 
-          {/* Banner Machine Learning */}
-          <div className="mt-6 flex flex-col items-start justify-between gap-4 rounded-card bg-axioma-900 p-5 text-white shadow-lift md:flex-row md:items-center">
-            <div className="flex items-start gap-4 md:items-center">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/10 text-axioma-300">
-                <BrainCircuit className="h-6 w-6" />
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold">Algoritmo predictivo de inasistencia (No-Show)</span>
-                  <span className="rounded-tag bg-axioma-300 px-2.5 py-0.5 text-[11px] font-bold text-axioma-950">
-                    En producción
-                  </span>
+          {/* Tarjeta Dashboard Machine Learning (Donut Chart + Predicciones de Riesgo) */}
+          <div className="mt-6 rounded-card border border-axioma-200 bg-white p-6 shadow-card">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              {/* Columna Izquierda: Donut Chart de Precisión + ROC-AUC */}
+              <div className="flex flex-col items-center gap-5 sm:flex-row lg:w-5/12">
+                <div className="relative h-40 w-40 shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={datosDonutPrecision}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={52}
+                        outerRadius={72}
+                        startAngle={90}
+                        endAngle={-270}
+                        strokeWidth={0}
+                      >
+                        {datosDonutPrecision.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: any) => `${value}%`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <span className="font-display text-2xl font-bold text-axioma-900">{precisionPct}%</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-axiomaText-soft">Precisión</span>
+                  </div>
                 </div>
-                <p className="mt-1 max-w-2xl text-sm leading-relaxed text-axioma-100">
-                  Inferencia matemática en tiempo real que calcula la probabilidad de inasistencia del paciente basándose en 6 variables clínicas y de comportamiento previo.
-                </p>
+
+                <div className="space-y-2 text-center sm:text-left">
+                  <div className="inline-flex items-center gap-2 rounded-tag bg-axioma-900 px-3 py-1 text-xs font-bold text-white">
+                    <BrainCircuit className="h-3.5 w-3.5 text-axioma-300" />
+                    <span>Modelo Machine Learning</span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                    <span className="rounded-tag border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-bold text-teal-900">
+                      Exactitud: {precisionPct}%
+                    </span>
+                    <span className="rounded-tag border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-900">
+                      ROC-AUC: {rocAucValor}
+                    </span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-axiomaText-soft">
+                    El modelo analiza 6 variables para predecir la inasistencia (No-Show).
+                  </p>
+                </div>
+              </div>
+
+              {/* Columna Derecha / Inferior: Tabla-lista de predicciones de riesgo */}
+              <div className="flex-1 rounded-card-sm border border-axioma-100 bg-axioma-50/50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-axioma-900">
+                    Predicciones de riesgo de las citas ({resumenMl?.totalCitas ?? citasActivasMl.length} registradas)
+                  </span>
+                  <span className="text-[11px] font-medium text-axiomaText-soft">Regresión Logística</span>
+                </div>
+                <div className="space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-white px-3.5 py-2">
+                    <span className="flex items-center gap-2 font-semibold text-emerald-900">
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                      Riesgo Bajo: {conteoBajo} citas ({pctBajo}%)
+                    </span>
+                    <div className="h-2 w-28 overflow-hidden rounded-full bg-emerald-100">
+                      <div className="h-full bg-emerald-500" style={{ width: `${pctBajo}%` }} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-white px-3.5 py-2">
+                    <span className="flex items-center gap-2 font-semibold text-amber-900">
+                      <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                      Riesgo Medio: {conteoMedio} citas ({pctMedio}%)
+                    </span>
+                    <div className="h-2 w-28 overflow-hidden rounded-full bg-amber-100">
+                      <div className="h-full bg-amber-500" style={{ width: `${pctMedio}%` }} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border border-rose-200 bg-white px-3.5 py-2">
+                    <span className="flex items-center gap-2 font-semibold text-rose-900">
+                      <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                      Riesgo Alto: {conteoAlto} citas ({pctAlto}%)
+                    </span>
+                    <div className="h-2 w-28 overflow-hidden rounded-full bg-rose-100">
+                      <div className="h-full bg-rose-500" style={{ width: `${pctAlto}%` }} />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-            <span className="shrink-0 rounded-tag bg-white px-3.5 py-1.5 text-xs font-bold text-axioma-900">
-              Precisión 84.6%
-            </span>
           </div>
 
           {/* ----------------- TAB: AGENDA CENTRAL & CITAS ----------------- */}

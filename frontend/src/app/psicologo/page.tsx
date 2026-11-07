@@ -9,6 +9,7 @@ import {
   FileText, CheckCircle2, XCircle, CalendarClock, AlertCircle, ArrowLeft,
   Users, BarChart3, Search, ChevronRight, ClipboardList, UserCheck, TrendingUp, Bell
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { apiFetch } from '@/lib/api';
 import { LogoAxioma } from '@/components/logo-axioma';
 import {
@@ -26,6 +27,7 @@ export default function PortalPsicologo() {
   const [tabActiva, setTabActiva] = useState<TabPsicologo>('agenda');
   const [citas, setCitas] = useState<any[]>([]);
   const [estadisticas, setEstadisticas] = useState<any>(null);
+  const [resumenMl, setResumenMl] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
   const [filtroFecha, setFiltroFecha] = useState<string>('');
   const [busquedaPaciente, setBusquedaPaciente] = useState<string>('');
@@ -84,12 +86,14 @@ export default function PortalPsicologo() {
     setErrorAcceso(null);
     try {
       const url = fecha ? `/citas?fecha=${fecha}` : '/citas';
-      const [data, dataStats] = await Promise.all([
+      const [data, dataStats, dataMl] = await Promise.all([
         apiFetch(url),
         apiFetch('/citas/estadisticas-psicologo').catch(() => null),
+        apiFetch('/ml/predicciones-resumen').catch(() => null),
       ]);
       setCitas(data || []);
       if (dataStats) setEstadisticas(dataStats);
+      if (dataMl) setResumenMl(dataMl);
     } catch (err: any) {
       console.error('Error al cargar citas de psicólogo:', err);
       if (err.status === 403) {
@@ -498,6 +502,18 @@ export default function PortalPsicologo() {
     1,
     ...sesionesPorSemana.map((s: any) => Math.max(s.total || 0, s.atendidas || 0))
   );
+
+  const citasActivasPsico = citas.filter((c) => c.estado !== 'CANCELADA');
+  const riesgoBajoCount = resumenMl?.distribucionRiesgo?.bajo ?? citasActivasPsico.filter((c) => !c.nivelRiesgoInasistencia || c.nivelRiesgoInasistencia === 'BAJO').length;
+  const riesgoMedioCount = resumenMl?.distribucionRiesgo?.medio ?? citasActivasPsico.filter((c) => c.nivelRiesgoInasistencia === 'MEDIO').length;
+  const riesgoAltoCount = resumenMl?.distribucionRiesgo?.alto ?? citasActivasPsico.filter((c) => c.nivelRiesgoInasistencia === 'ALTO').length;
+  const totalRiesgoCount = Math.max(1, riesgoBajoCount + riesgoMedioCount + riesgoAltoCount);
+  const datosPastelRiesgo = [
+    { name: 'Riesgo Bajo', value: riesgoBajoCount, color: '#10b981' },
+    { name: 'Riesgo Medio', value: riesgoMedioCount, color: '#f59e0b' },
+    { name: 'Riesgo Alto', value: riesgoAltoCount, color: '#f43f5e' },
+  ];
+  const citasRiesgoAlto = citasActivasPsico.filter((c) => c.nivelRiesgoInasistencia === 'ALTO');
 
   const pestanas: { id: TabPsicologo; Icono: typeof Calendar; texto: string }[] = [
     { id: 'agenda', Icono: Calendar, texto: 'Mi Agenda' },
@@ -1200,6 +1216,113 @@ export default function PortalPsicologo() {
                     })}
                   </div>
                 )}
+              </div>
+
+              {/* Sección: Predicción de Inasistencia (Machine Learning) */}
+              <div className={`${card} p-6`}>
+                <div className="flex flex-col gap-2 border-b border-axioma-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-axioma-900 text-axioma-300">
+                      <BrainCircuit className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <h2 className="font-display text-lg font-medium tracking-heading text-axiomaText-ink">
+                        Predicción de Inasistencia (Machine Learning)
+                      </h2>
+                      <p className="text-xs text-axiomaText-soft">
+                        Distribución de niveles de riesgo No-Show en tu cartera y alertas preventivas (Precisión 84.6% • ROC-AUC 0.87).
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
+                  {/* Gráfico de Pastel con Distribución de Riesgo */}
+                  <div className="flex flex-col items-center justify-center rounded-card-sm border border-axioma-100 bg-axioma-50/40 p-5 lg:col-span-5">
+                    <div className="h-48 w-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={datosPastelRiesgo}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={42}
+                            outerRadius={76}
+                            paddingAngle={3}
+                          >
+                            {datosPastelRiesgo.map((entry, idx) => (
+                              <Cell key={`riesgo-cell-${idx}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: any) => `${value} cita(s)`} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="mt-3 grid w-full grid-cols-3 gap-2 text-center text-xs">
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-2">
+                        <span className="block font-bold text-emerald-900">{riesgoBajoCount} ({Math.round((riesgoBajoCount / totalRiesgoCount) * 100)}%)</span>
+                        <span className="text-[11px] text-emerald-700">Riesgo Bajo</span>
+                      </div>
+                      <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-2">
+                        <span className="block font-bold text-amber-900">{riesgoMedioCount} ({Math.round((riesgoMedioCount / totalRiesgoCount) * 100)}%)</span>
+                        <span className="text-[11px] text-amber-700">Riesgo Medio</span>
+                      </div>
+                      <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-2">
+                        <span className="block font-bold text-rose-900">{riesgoAltoCount} ({Math.round((riesgoAltoCount / totalRiesgoCount) * 100)}%)</span>
+                        <span className="text-[11px] text-rose-700">Riesgo Alto</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lista de Pacientes con Riesgo Alto + Botón Enviar Recordatorio */}
+                  <div className="flex flex-col justify-between rounded-card-sm border border-axioma-100 bg-white p-5 lg:col-span-7">
+                    <div>
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-axiomaText-ink">
+                          Pacientes con Riesgo Alto de Inasistencia ({citasRiesgoAlto.length})
+                        </h3>
+                        <span className="rounded-tag bg-rose-100 px-2.5 py-0.5 text-[11px] font-semibold text-rose-800">
+                          Probabilidad &gt; 65%
+                        </span>
+                      </div>
+
+                      {citasRiesgoAlto.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-axioma-200 bg-axioma-50/50 p-8 text-center text-xs text-axiomaText-soft">
+                          Actualmente no tienes citas con alerta de Riesgo Alto en tu agenda.
+                        </div>
+                      ) : (
+                        <div className="max-h-64 divide-y divide-axioma-100 overflow-y-auto">
+                          {citasRiesgoAlto.map((c) => (
+                            <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                              <div>
+                                <p className="text-sm font-semibold text-axiomaText-ink">
+                                  {c.paciente ? `${c.paciente.nombres} ${c.paciente.apellidos}` : 'Paciente'}
+                                </p>
+                                <p className="text-xs text-axiomaText-soft">
+                                  {fechaCorta(c.fechaHoraInicio)} • {horaCorta(c.fechaHoraInicio)} — Riesgo:{' '}
+                                  <strong className="text-rose-700">
+                                    {Math.round(Number(c.probabilidadInasistencia || 0.72) * 100)}%
+                                  </strong>
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setCitaParaRecordatorio(c)}
+                                className="inline-flex items-center gap-1.5 rounded-button border border-amber-300 bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-200"
+                              >
+                                <Bell className="h-3.5 w-3.5" />
+                                <span>Enviar Recordatorio</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
