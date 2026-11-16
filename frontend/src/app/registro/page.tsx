@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, Shield } from 'lucide-react';
+import { AlertCircle, Shield, Eye, EyeOff } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { AuthShell } from '@/components/auth-shell';
 import { btnPrimary, tamLg, card, label, input, foco } from '@/lib/ui';
@@ -16,11 +16,14 @@ export default function PaginaRegistro() {
     apellidos: '',
     correo: '',
     contrasena: '',
+    confirmarContrasena: '',
     telefono: '',
     genero: 'No especificado',
   });
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
+  const [mostrarContrasena, setMostrarContrasena] = useState(false);
+  const [mostrarConfirmar, setMostrarConfirmar] = useState(false);
 
   const manejarCambio = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -28,6 +31,8 @@ export default function PaginaRegistro() {
 
   const dniInvalido = form.dni.length > 0 && !/^[0-9]{8}$/.test(form.dni);
   const telefonoInvalido = form.telefono.length > 0 && !/^[0-9]{9}$/.test(form.telefono);
+  const contrasenasNoCoinciden =
+    form.confirmarContrasena.length > 0 && form.contrasena !== form.confirmarContrasena;
 
   const manejarEnvio = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,13 +44,18 @@ export default function PaginaRegistro() {
       setError('El teléfono debe tener 9 dígitos');
       return;
     }
+    if (form.contrasena !== form.confirmarContrasena) {
+      setError('Las contraseñas no coinciden');
+      return;
+    }
     setError('');
     setCargando(true);
 
     try {
+      const { confirmarContrasena, ...datosRegistro } = form;
       const data = await apiFetch('/auth/registro-paciente', {
         method: 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify(datosRegistro),
       });
 
       localStorage.setItem('axioma_token', data.token);
@@ -188,36 +198,77 @@ export default function PaginaRegistro() {
               <label htmlFor="contrasena" className={label}>
                 Contraseña
               </label>
-              <input
-                id="contrasena"
-                type="password"
-                name="contrasena"
-                required
-                minLength={6}
-                autoComplete="new-password"
-                value={form.contrasena}
-                onChange={manejarCambio}
-                placeholder="Mínimo 6 caracteres"
-                className={input}
-              />
+              <div className="relative">
+                <input
+                  id="contrasena"
+                  type={mostrarContrasena ? 'text' : 'password'}
+                  name="contrasena"
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                  value={form.contrasena}
+                  onChange={manejarCambio}
+                  placeholder="Mínimo 6 caracteres"
+                  className={`${input} pr-10`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarContrasena((v) => !v)}
+                  aria-label="Mostrar u ocultar contraseña"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-axiomaText-soft hover:text-axiomaText-ink"
+                >
+                  {mostrarContrasena ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div>
-              <label htmlFor="genero" className={label}>
-                Género
+              <label htmlFor="confirmarContrasena" className={label}>
+                Confirmar Contraseña
               </label>
-              <select
-                id="genero"
-                name="genero"
-                value={form.genero}
-                onChange={manejarCambio}
-                className={input}
-              >
-                <option value="Femenino">Femenino</option>
-                <option value="Masculino">Masculino</option>
-                <option value="No binario">No binario</option>
-                <option value="No especificado">Prefiero no especificar</option>
-              </select>
+              <div className="relative">
+                <input
+                  id="confirmarContrasena"
+                  type={mostrarConfirmar ? 'text' : 'password'}
+                  name="confirmarContrasena"
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                  value={form.confirmarContrasena}
+                  onChange={manejarCambio}
+                  placeholder="Repite tu contraseña"
+                  className={`${input} pr-10 ${contrasenasNoCoinciden ? 'border-red-400 focus:border-red-500' : ''}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarConfirmar((v) => !v)}
+                  aria-label="Mostrar u ocultar confirmación de contraseña"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-axiomaText-soft hover:text-axiomaText-ink"
+                >
+                  {mostrarConfirmar ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {contrasenasNoCoinciden && (
+                <p className="mt-1 text-xs font-medium text-red-600">Las contraseñas no coinciden</p>
+              )}
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="genero" className={label}>
+              Género
+            </label>
+            <select
+              id="genero"
+              name="genero"
+              value={form.genero}
+              onChange={manejarCambio}
+              className={input}
+            >
+              <option value="Femenino">Femenino</option>
+              <option value="Masculino">Masculino</option>
+              <option value="No binario">No binario</option>
+              <option value="No especificado">Prefiero no especificar</option>
+            </select>
           </div>
 
           <div className="flex items-start gap-2.5 rounded-card-sm border border-axioma-200 bg-axioma-100 p-4 text-xs leading-relaxed text-axioma-900">

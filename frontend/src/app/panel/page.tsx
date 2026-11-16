@@ -45,11 +45,13 @@ const generarHorariosDisponibles = (fechaStr: string) => {
   const horaFin = dia === 6 ? 13 : 18; // Sábados hasta 1pm, Lun-Vie hasta 6pm
 
   for (let h = horaInicio; h < horaFin; h++) {
+    if (dia !== 6 && h === 13) continue; // Refrigerio Lun-Vie 13:00 - 14:00
     const hStr = h.toString().padStart(2, '0');
+    const h12 = (h % 12 === 0 ? 12 : h % 12).toString().padStart(2, '0');
     horarios.push({
       inicio: `${hStr}:00`,
       fin: `${hStr}:50`,
-      etiqueta: `${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? 'AM' : 'PM'} - ${h % 12 === 0 ? 12 : h % 12}:50 ${h < 12 ? 'AM' : 'PM'}`
+      etiqueta: `${h12}:00 - ${h12}:50 ${h < 12 ? 'AM' : 'PM'}`
     });
   }
   return horarios;
@@ -297,6 +299,20 @@ export default function PanelStaff() {
       const cHoraLocal = horaHmLocal(c.fechaHoraInicio);
       return cFechaLocal === fecha && cHoraLocal === horaInicioStr;
     });
+  };
+
+  const esHorarioPasado = (fecha: string, horaInicioStr: string) => {
+    if (!fecha || !horaInicioStr) return false;
+    const slotDate = new Date(`${fecha}T${horaInicioStr}:00`);
+    return slotDate < new Date();
+  };
+
+  const primerHorarioDisponibleIndex = (psicologoId: string, fecha: string, excludeCitaId?: string) => {
+    const bloques = generarHorariosDisponibles(fecha);
+    const idx = bloques.findIndex(
+      (h) => !esHorarioPasado(fecha, h.inicio) && !esSlotOcupado(psicologoId, fecha, h.inicio, excludeCitaId)
+    );
+    return idx >= 0 ? String(idx) : '0';
   };
 
   // --- ACCIONES DE CITAS ---
@@ -832,9 +848,25 @@ export default function PanelStaff() {
   };
 
   // --- CREAR NUEVO PAQUETE (HU-08) ---
+  const sesionesPaqueteInvalido = Number(formCrearPaquete.cantidadSesiones) < 1;
+  const precioPaqueteInvalido = Number(formCrearPaquete.precio) <= 0;
+  const vigenciaPaqueteInvalida = Number(formCrearPaquete.vigenciaDias) < 1;
+
   const handleCrearPaquete = async (e: React.FormEvent) => {
     e.preventDefault();
     if (procesando) return;
+    if (sesionesPaqueteInvalido) {
+      toast.error('El número de sesiones debe ser mayor a 0 (mínimo 1).');
+      return;
+    }
+    if (precioPaqueteInvalido) {
+      toast.error('El precio del paquete debe ser mayor a S/ 0.');
+      return;
+    }
+    if (vigenciaPaqueteInvalida) {
+      toast.error('La vigencia debe ser mayor a 0 (mínimo 1 día).');
+      return;
+    }
     setProcesando(true);
     try {
       await apiFetch('/paquetes', {
@@ -1842,7 +1874,7 @@ export default function PanelStaff() {
       {mostrarModalCita && (
         <div className={modalOverlay}>
           <div className={modalWrap}>
-            <div className={`${modalCard} max-w-lg`} role="dialog" aria-modal="true">
+            <div className={`${modalCard} max-w-2xl max-h-[92vh] overflow-y-auto`} role="dialog" aria-modal="true">
               <h3 className="font-display text-2xl font-medium tracking-heading text-axiomaText-ink">
                 Agendar cita en agenda central
               </h3>
@@ -1869,11 +1901,13 @@ export default function PanelStaff() {
                       const pkActivo = pac?.paquetesPaciente?.find(
                         (pk: any) => pk.estado === 'ACTIVO' && pk.sesionesRestantes > 0
                       );
+                      const psiDestino = pkActivo?.psicologoId ? pkActivo.psicologoId : formCita.psicologoId;
                       setErrorModalCita(null);
                       setFormCita({
                         ...formCita,
                         pacienteId: nuevoPacienteId,
-                        psicologoId: pkActivo?.psicologoId ? pkActivo.psicologoId : formCita.psicologoId,
+                        psicologoId: psiDestino,
+                        horarioIndex: primerHorarioDisponibleIndex(psiDestino, formCita.fecha),
                       });
                     }}
                     className={input}
@@ -1910,8 +1944,13 @@ export default function PanelStaff() {
                     required
                     value={formCita.psicologoId}
                     onChange={(e) => {
+                      const nuevoPsiId = e.target.value;
                       setErrorModalCita(null);
-                      setFormCita({ ...formCita, psicologoId: e.target.value });
+                      setFormCita({
+                        ...formCita,
+                        psicologoId: nuevoPsiId,
+                        horarioIndex: primerHorarioDisponibleIndex(nuevoPsiId, formCita.fecha),
+                      });
                     }}
                     className={input}
                   >
@@ -1933,36 +1972,89 @@ export default function PanelStaff() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <label htmlFor="fechaCita" className={label}>Fecha</label>
-                    <input
-                      id="fechaCita"
-                      type="date"
-                      required
-                      min={hoyStr}
-                      value={formCita.fecha}
-                      onChange={(e) => setFormCita({ ...formCita, fecha: e.target.value, horarioIndex: '0' })}
-                      className={input}
-                    />
+                <div className="grid grid-cols-1 gap-4 rounded-card-sm border border-axioma-200/80 bg-axioma-50/40 p-4 sm:grid-cols-12">
+                  {/* Lado izquierdo: Calendario / Selector de Fecha */}
+                  <div className="flex flex-col justify-between rounded-xl border border-axioma-200 bg-white p-3.5 shadow-sm sm:col-span-5">
+                    <div>
+                      <label htmlFor="fechaCita" className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-axioma-800">
+                        <Calendar className="h-3.5 w-3.5 text-axioma-600" />
+                        <span>Fecha de cita</span>
+                      </label>
+                      <input
+                        id="fechaCita"
+                        type="date"
+                        required
+                        min={hoyStr}
+                        value={formCita.fecha}
+                        onChange={(e) => {
+                          const nuevaFecha = e.target.value;
+                          setFormCita({
+                            ...formCita,
+                            fecha: nuevaFecha,
+                            horarioIndex: primerHorarioDisponibleIndex(formCita.psicologoId, nuevaFecha),
+                          });
+                        }}
+                        className={`${input} mt-2 font-medium`}
+                      />
+                    </div>
+
+                    <div className="mt-3 rounded-lg bg-axioma-50 p-2.5 text-xs text-axiomaText-soft">
+                      <p className="font-semibold capitalize text-axiomaText-ink">
+                        {formCita.fecha
+                          ? new Date(formCita.fecha + 'T00:00:00').toLocaleDateString('es-PE', {
+                              weekday: 'long',
+                              day: 'numeric',
+                              month: 'long',
+                            })
+                          : 'Seleccione una fecha'}
+                      </p>
+                      <p className="mt-0.5 text-[11px]">
+                        Sesiones de 50 min • Refrigerio 1:00 - 2:00 PM
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <label htmlFor="horarioSelect" className={label}>Horario de sesión (50 min)</label>
-                    <select
-                      id="horarioSelect"
-                      value={formCita.horarioIndex}
-                      onChange={(e) => setFormCita({ ...formCita, horarioIndex: e.target.value })}
-                      className={input}
-                    >
-                      {generarHorariosDisponibles(formCita.fecha).map((h, i) => {
-                        const ocupado = esSlotOcupado(formCita.psicologoId, formCita.fecha, h.inicio);
-                        return (
-                          <option key={i} value={i} disabled={ocupado}>
-                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : ''}
-                          </option>
-                        );
-                      })}
-                    </select>
+
+                  {/* Lado derecho: Grid de Botones de Horarios */}
+                  <div className="sm:col-span-7">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-axioma-800">
+                      Horario de sesión (50 min)
+                    </label>
+                    {generarHorariosDisponibles(formCita.fecha).length === 0 ? (
+                      <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-center text-xs font-medium text-amber-800">
+                        Domingos sin atención clínica. Selecciona un día de lunes a sábado.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          {generarHorariosDisponibles(formCita.fecha).map((h, i) => {
+                            const ocupado = esSlotOcupado(formCita.psicologoId, formCita.fecha, h.inicio);
+                            const pasado = esHorarioPasado(formCita.fecha, h.inicio);
+                            const deshabilitado = ocupado || pasado;
+                            const seleccionado = !deshabilitado && formCita.horarioIndex === String(i);
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                disabled={deshabilitado}
+                                onClick={() => setFormCita({ ...formCita, horarioIndex: String(i) })}
+                                className={`rounded-xl border px-2.5 py-2 text-xs font-semibold transition-all ${
+                                  deshabilitado
+                                    ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                                    : seleccionado
+                                      ? 'border-axioma-600 bg-axioma-600 text-white shadow-sm ring-2 ring-axioma-600/30'
+                                      : 'border-axioma-300 bg-white text-axioma-800 hover:border-axioma-600 hover:bg-axioma-50'
+                                }`}
+                              >
+                                {h.etiqueta}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-2 text-[11px] font-medium text-axiomaText-soft">
+                          Los horarios en gris no están disponibles.
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -2044,7 +2136,18 @@ export default function PanelStaff() {
                       required
                       min={hoyStr}
                       value={formReprogramar.fecha}
-                      onChange={(e) => setFormReprogramar({ ...formReprogramar, fecha: e.target.value, horarioIndex: '0' })}
+                      onChange={(e) => {
+                        const nuevaFecha = e.target.value;
+                        setFormReprogramar({
+                          ...formReprogramar,
+                          fecha: nuevaFecha,
+                          horarioIndex: primerHorarioDisponibleIndex(
+                            citaSeleccionadaParaReprog.psicologoId,
+                            nuevaFecha,
+                            citaSeleccionadaParaReprog.id
+                          ),
+                        });
+                      }}
                       className={input}
                     />
                   </div>
@@ -2063,9 +2166,16 @@ export default function PanelStaff() {
                           h.inicio,
                           citaSeleccionadaParaReprog.id
                         );
+                        const pasado = esHorarioPasado(formReprogramar.fecha, h.inicio);
+                        const deshabilitado = ocupado || pasado;
                         return (
-                          <option key={i} value={i} disabled={ocupado}>
-                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : ''}
+                          <option
+                            key={i}
+                            value={i}
+                            disabled={deshabilitado}
+                            className={deshabilitado ? 'bg-slate-100 text-slate-400' : 'text-axiomaText-ink'}
+                          >
+                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : pasado ? '— [HORARIO PASADO]' : ''}
                           </option>
                         );
                       })}
@@ -2849,33 +2959,39 @@ export default function PanelStaff() {
                     <input
                       type="number"
                       required
-                      min={1}
                       value={formCrearPaquete.cantidadSesiones}
                       onChange={(e) => setFormCrearPaquete({ ...formCrearPaquete, cantidadSesiones: Number(e.target.value) })}
-                      className={input}
+                      className={`${input} ${sesionesPaqueteInvalido ? 'border-red-400 focus:border-red-500' : ''}`}
                     />
+                    {sesionesPaqueteInvalido && (
+                      <p className="mt-1 text-xs font-medium text-red-600">Mínimo 1 sesión (mayor a 0)</p>
+                    )}
                   </div>
                   <div>
                     <label className={label}>Precio (S/.)</label>
                     <input
                       type="number"
                       required
-                      min={1}
                       value={formCrearPaquete.precio}
                       onChange={(e) => setFormCrearPaquete({ ...formCrearPaquete, precio: Number(e.target.value) })}
-                      className={input}
+                      className={`${input} ${precioPaqueteInvalido ? 'border-red-400 focus:border-red-500' : ''}`}
                     />
+                    {precioPaqueteInvalido && (
+                      <p className="mt-1 text-xs font-medium text-red-600">El precio debe ser mayor a S/ 0</p>
+                    )}
                   </div>
                   <div>
                     <label className={label}>Vigencia (días)</label>
                     <input
                       type="number"
                       required
-                      min={1}
                       value={formCrearPaquete.vigenciaDias}
                       onChange={(e) => setFormCrearPaquete({ ...formCrearPaquete, vigenciaDias: Number(e.target.value) })}
-                      className={input}
+                      className={`${input} ${vigenciaPaqueteInvalida ? 'border-red-400 focus:border-red-500' : ''}`}
                     />
+                    {vigenciaPaqueteInvalida && (
+                      <p className="mt-1 text-xs font-medium text-red-600">Mínimo 1 día de vigencia</p>
+                    )}
                   </div>
                 </div>
 

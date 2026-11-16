@@ -230,6 +230,20 @@ export default function PanelRecepcion() {
     });
   };
 
+  const esHorarioPasado = (fecha: string, horaInicioStr: string) => {
+    if (!fecha || !horaInicioStr) return false;
+    const slotDate = new Date(`${fecha}T${horaInicioStr}:00`);
+    return slotDate < new Date();
+  };
+
+  const primerHorarioDisponibleIndex = (psicologoId: string, fecha: string, excludeCitaId?: string) => {
+    const bloques = generarHorariosDisponibles(fecha);
+    const idx = bloques.findIndex(
+      (h) => !esHorarioPasado(fecha, h.inicio) && !esSlotOcupado(psicologoId, fecha, h.inicio, excludeCitaId)
+    );
+    return idx >= 0 ? String(idx) : '0';
+  };
+
   // --- ACCIONES DE CITAS (RECEPCIÓN) ---
   const handleMarcarAsistencia = async (c: any) => {
     if (procesando) return;
@@ -1387,8 +1401,13 @@ export default function PanelRecepcion() {
                     required
                     value={formCita.psicologoId}
                     onChange={(e) => {
+                      const nuevoPsiId = e.target.value;
                       setErrorModalCita(null);
-                      setFormCita({ ...formCita, psicologoId: e.target.value });
+                      setFormCita({
+                        ...formCita,
+                        psicologoId: nuevoPsiId,
+                        horarioIndex: primerHorarioDisponibleIndex(nuevoPsiId, formCita.fecha),
+                      });
                     }}
                     className={input}
                   >
@@ -1419,7 +1438,14 @@ export default function PanelRecepcion() {
                       required
                       min={hoyStr}
                       value={formCita.fecha}
-                      onChange={(e) => setFormCita({ ...formCita, fecha: e.target.value, horarioIndex: '0' })}
+                      onChange={(e) => {
+                        const nuevaFecha = e.target.value;
+                        setFormCita({
+                          ...formCita,
+                          fecha: nuevaFecha,
+                          horarioIndex: primerHorarioDisponibleIndex(formCita.psicologoId, nuevaFecha),
+                        });
+                      }}
                       className={input}
                     />
                   </div>
@@ -1433,9 +1459,16 @@ export default function PanelRecepcion() {
                     >
                       {generarHorariosDisponibles(formCita.fecha).map((h, i) => {
                         const ocupado = esSlotOcupado(formCita.psicologoId, formCita.fecha, h.inicio);
+                        const pasado = esHorarioPasado(formCita.fecha, h.inicio);
+                        const deshabilitado = ocupado || pasado;
                         return (
-                          <option key={i} value={i} disabled={ocupado}>
-                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : ''}
+                          <option
+                            key={i}
+                            value={i}
+                            disabled={deshabilitado}
+                            className={deshabilitado ? 'bg-slate-100 text-slate-400' : 'text-axiomaText-ink'}
+                          >
+                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : pasado ? '— [HORARIO PASADO]' : ''}
                           </option>
                         );
                       })}
@@ -1533,7 +1566,18 @@ export default function PanelRecepcion() {
                       required
                       min={hoyStr}
                       value={formReprogramar.fecha}
-                      onChange={(e) => setFormReprogramar({ ...formReprogramar, fecha: e.target.value, horarioIndex: '0' })}
+                      onChange={(e) => {
+                        const nuevaFecha = e.target.value;
+                        setFormReprogramar({
+                          ...formReprogramar,
+                          fecha: nuevaFecha,
+                          horarioIndex: primerHorarioDisponibleIndex(
+                            citaSeleccionadaParaReprog.psicologoId,
+                            nuevaFecha,
+                            citaSeleccionadaParaReprog.id
+                          ),
+                        });
+                      }}
                       className={input}
                     />
                   </div>
@@ -1552,9 +1596,16 @@ export default function PanelRecepcion() {
                           h.inicio,
                           citaSeleccionadaParaReprog.id
                         );
+                        const pasado = esHorarioPasado(formReprogramar.fecha, h.inicio);
+                        const deshabilitado = ocupado || pasado;
                         return (
-                          <option key={i} value={i} disabled={ocupado}>
-                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : ''}
+                          <option
+                            key={i}
+                            value={i}
+                            disabled={deshabilitado}
+                            className={deshabilitado ? 'bg-slate-100 text-slate-400' : 'text-axiomaText-ink'}
+                          >
+                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : pasado ? '— [HORARIO PASADO]' : ''}
                           </option>
                         );
                       })}

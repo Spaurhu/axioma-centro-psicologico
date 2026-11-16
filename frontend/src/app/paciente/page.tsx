@@ -147,6 +147,20 @@ export default function PortalPaciente() {
     });
   };
 
+  const esHorarioPasado = (fecha: string, horaInicioStr: string) => {
+    if (!fecha || !horaInicioStr) return false;
+    const slotDate = new Date(`${fecha}T${horaInicioStr}:00`);
+    return slotDate < new Date();
+  };
+
+  const primerHorarioDisponibleIndex = (psicologoId: string, fecha: string) => {
+    const bloques = generarHorariosDisponibles(fecha);
+    const idx = bloques.findIndex(
+      (h) => !esHorarioPasado(fecha, h.inicio) && !esSlotOcupado(psicologoId, fecha, h.inicio)
+    );
+    return idx >= 0 ? String(idx) : '0';
+  };
+
   const handleAgendar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pacienteInfo?.id || procesando) return;
@@ -545,7 +559,14 @@ export default function PortalPaciente() {
                     required
                     disabled={Boolean(psicologoVinculadoId)}
                     value={psicologoVinculadoId || formCita.psicologoId}
-                    onChange={(e) => setFormCita({ ...formCita, psicologoId: e.target.value })}
+                    onChange={(e) => {
+                      const nuevoPsiId = e.target.value;
+                      setFormCita({
+                        ...formCita,
+                        psicologoId: nuevoPsiId,
+                        horarioIndex: primerHorarioDisponibleIndex(nuevoPsiId, formCita.fecha),
+                      });
+                    }}
                     className={`${input} ${psicologoVinculadoId ? 'bg-axioma-50 cursor-not-allowed opacity-90' : ''}`}
                   >
                     <option value="">Seleccione terapeuta...</option>
@@ -572,7 +593,14 @@ export default function PortalPaciente() {
                       required
                       min={hoyStr}
                       value={formCita.fecha}
-                      onChange={(e) => setFormCita({ ...formCita, fecha: e.target.value, horarioIndex: '0' })}
+                      onChange={(e) => {
+                        const nuevaFecha = e.target.value;
+                        setFormCita({
+                          ...formCita,
+                          fecha: nuevaFecha,
+                          horarioIndex: primerHorarioDisponibleIndex(psicologoVinculadoId || formCita.psicologoId, nuevaFecha),
+                        });
+                      }}
                       className={input}
                     />
                   </div>
@@ -586,9 +614,16 @@ export default function PortalPaciente() {
                     >
                       {generarHorariosDisponibles(formCita.fecha).map((h, i) => {
                         const ocupado = esSlotOcupado(psicologoVinculadoId || formCita.psicologoId, formCita.fecha, h.inicio);
+                        const pasado = esHorarioPasado(formCita.fecha, h.inicio);
+                        const deshabilitado = ocupado || pasado;
                         return (
-                          <option key={i} value={i} disabled={ocupado}>
-                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : ''}
+                          <option
+                            key={i}
+                            value={i}
+                            disabled={deshabilitado}
+                            className={deshabilitado ? 'bg-slate-100 text-slate-400' : 'text-axiomaText-ink'}
+                          >
+                            {h.etiqueta} {ocupado ? '— [OCUPADO]' : pasado ? '— [HORARIO PASADO]' : ''}
                           </option>
                         );
                       })}
